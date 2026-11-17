@@ -173,8 +173,8 @@ export function splitMessage(md, max = CHUNK) {
 // ── Bot ─────────────────────────────────────────────────────────
 function helpText(limit) {
   return t(
-    `<b>${BOT_NAME}</b> – Agent X von VAIs in Telegram.\n\n<b>Befehle</b>\n/neu – Verlauf löschen\n/modus – Schnell, Experte oder Agent X wählen\n/recherche &lt;Frage&gt; – gründliche Recherche mit Quellen\n/heavy &lt;Frage&gt; – mehrere starke Modelle, die beste Antwort\n/bild &lt;Beschreibung&gt; – Bild erstellen\n/quiz [Thema] – Quizfrage (Weltraum, Tech, KI)\n/news – aktuelle KI- und Tech-News\n/witz – ein Witz\n/fakt – ein Weltraum-Fakt\n/umfrage Frage | A | B – Umfrage\n/hilfe – diese Hilfe\n\nSchreib einfach eine Nachricht – Standard ist Agent X (sucht, liest, rechnet selbstständig). Bis zu ${limit} Nachrichten pro Tag.\n\nIn Gruppen: Füg mich hinzu und erwähne mich mit @-Namen – /hilfe zeigt dort die Gruppen-Befehle.`,
-    `<b>${BOT_NAME}</b> – VAIs Agent X on Telegram.\n\n<b>Commands</b>\n/neu – clear history\n/modus – choose Fast, Expert or Agent X\n/recherche &lt;question&gt; – thorough research with sources\n/heavy &lt;question&gt; – several strong models, the best answer\n/bild &lt;description&gt; – create an image\n/quiz [topic] – quiz question (space, tech, AI)\n/news – current AI and tech news\n/witz – a joke\n/fakt – a space fact\n/umfrage Question | A | B – poll\n/hilfe – this help\n\nJust send a message – the default is Agent X (searches, reads and calculates on its own). Up to ${limit} messages per day.\n\nIn groups: add me and mention me by @name – /hilfe shows the group commands there.`,
+    `<b>${BOT_NAME}</b> – Agent X von Apex in Telegram.\n\n<b>Befehle</b>\n/neu – Verlauf löschen\n/modus – Schnell, Experte oder Agent X wählen\n/recherche &lt;Frage&gt; – gründliche Recherche mit Quellen\n/heavy &lt;Frage&gt; – mehrere starke Modelle, die beste Antwort\n/bild &lt;Beschreibung&gt; – Bild erstellen\n/quiz [Thema] – Quizfrage (Weltraum, Tech, KI)\n/news – aktuelle KI- und Tech-News\n/witz – ein Witz\n/fakt – ein Weltraum-Fakt\n/umfrage Frage | A | B – Umfrage\n/hilfe – diese Hilfe\n\nSchreib einfach eine Nachricht – Standard ist Agent X (sucht, liest, rechnet selbstständig). Bis zu ${limit} Nachrichten pro Tag.\n\nIn Gruppen: Füg mich hinzu und erwähne mich mit @-Namen – /hilfe zeigt dort die Gruppen-Befehle.`,
+    `<b>${BOT_NAME}</b> – Apex Agent X on Telegram.\n\n<b>Commands</b>\n/neu – clear history\n/modus – choose Fast, Expert or Agent X\n/recherche &lt;question&gt; – thorough research with sources\n/heavy &lt;question&gt; – several strong models, the best answer\n/bild &lt;description&gt; – create an image\n/quiz [topic] – quiz question (space, tech, AI)\n/news – current AI and tech news\n/witz – a joke\n/fakt – a space fact\n/umfrage Question | A | B – poll\n/hilfe – this help\n\nJust send a message – the default is Agent X (searches, reads and calculates on its own). Up to ${limit} messages per day.\n\nIn groups: add me and mention me by @name – /hilfe shows the group commands there.`,
   );
 }
 function groupHelpText(username) {
@@ -184,8 +184,8 @@ function groupHelpText(username) {
   );
 }
 const startText = (name) => t(
-  `Hallo${name ? ` ${esc(name)}` : ''}! 👋 Ich bin <b>${BOT_NAME}</b> – Agent X von VAIs.\n\nFrag mich einfach etwas, zum Beispiel:\n• <i>Was ist heute in der Raumfahrt passiert?</i>\n• <i>Erklär mir schwarze Löcher, als wäre ich 12</i>\n• /recherche Vor- und Nachteile von E-Autos 2026\n• /heavy Beweise, dass √2 irrational ist\n\n/hilfe zeigt alle Befehle.`,
-  `Hi${name ? ` ${esc(name)}` : ''}! 👋 I'm <b>${BOT_NAME}</b> – VAIs Agent X.\n\nJust ask me something, for example:\n• <i>What happened in space news today?</i>\n• <i>Explain black holes like I'm 12</i>\n• /recherche pros and cons of electric cars 2026\n• /heavy Prove that √2 is irrational\n\n/hilfe shows all commands.`,
+  `Hallo${name ? ` ${esc(name)}` : ''}! 👋 Ich bin <b>${BOT_NAME}</b> – Agent X von Apex.\n\nFrag mich einfach etwas, zum Beispiel:\n• <i>Was ist heute in der Raumfahrt passiert?</i>\n• <i>Erklär mir schwarze Löcher, als wäre ich 12</i>\n• /recherche Vor- und Nachteile von E-Autos 2026\n• /heavy Beweise, dass √2 irrational ist\n\n/hilfe zeigt alle Befehle.`,
+  `Hi${name ? ` ${esc(name)}` : ''}! 👋 I'm <b>${BOT_NAME}</b> – Apex Agent X.\n\nJust ask me something, for example:\n• <i>What happened in space news today?</i>\n• <i>Explain black holes like I'm 12</i>\n• /recherche pros and cons of electric cars 2026\n• /heavy Prove that √2 is irrational\n\n/hilfe shows all commands.`,
 );
 const CMD = {
   start: () => t('Begrüßung und Beispiele', 'Welcome and examples'),
@@ -315,7 +315,7 @@ export function createBot({ config = telegramConfig(), api = null, answer = null
       maxTokens: mode === 'expert' ? 4000 : 2000,
       reasoningEffort: mode === 'expert' ? 'high' : 'low',
       timeoutMs: 120_000,
-      messages: [{ role: 'system', content: `${basePrompt({ model: null })}\nYou are chatting on Telegram as "${BOT_NAME}" (VAIs).` }, ...messages],
+      messages: [{ role: 'system', content: `${basePrompt({ model: null })}\nYou are chatting on Telegram as "${BOT_NAME}" (Apex).` }, ...messages],
     }, { signal });
     return { text: String(msg.content ?? ''), sources, images };
   }
@@ -425,7 +425,7 @@ export function createBot({ config = telegramConfig(), api = null, answer = null
     }
     throw lastErr ?? new Error('kein Bildmodell frei');
   });
-  const sys = (extra) => ({ role: 'system', content: `${basePrompt({ model: null })}\nYou are "${BOT_NAME}" (VAIs) in a Telegram chat. ${extra}` });
+  const sys = (extra) => ({ role: 'system', content: `${basePrompt({ model: null })}\nYou are "${BOT_NAME}" (Apex) in a Telegram chat. ${extra}` });
   const jsonOf = (text) => JSON.parse(String(text).replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, '$1'));
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
@@ -773,7 +773,7 @@ export function createBot({ config = telegramConfig(), api = null, answer = null
       const current = await tg.call('getMyName', {});
       if (current?.name !== BOT_NAME) await tg.call('setMyName', { name: BOT_NAME });
     } catch (err) { log('Name setzen fehlgeschlagen', err); }
-    await tg.call('setMyShortDescription', { short_description: 'Agent X von VAIs – sucht, liest, rechnet und recherchiert für dich.' }).catch(() => {});
+    await tg.call('setMyShortDescription', { short_description: 'Agent X von Apex – sucht, liest, rechnet und recherchiert für dich.' }).catch(() => {});
     return state;
   }
 

@@ -53,17 +53,20 @@ export async function statusPage(req, res) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-title" content="Apex">
 <meta http-equiv="refresh" content="60">
-<title>Status – VAIs</title>
+<title>Status – Apex</title>
 <script src="/boot.js"></script>
+<link rel="icon" href="/favicon-32-v2.png" sizes="32x32" type="image/png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-v2.png" sizes="180x180">
 <link rel="stylesheet" href="/fonts.css">
 <link rel="stylesheet" href="/styles.css">
 <link rel="stylesheet" href="/status.css">
 </head>
 <body class="status-page">
 <main class="st-main">
-  <a class="brand st-brand" href="/" aria-label="VAIs"><span class="st-mark" aria-hidden="true"></span><span>VAIs</span></a>
+  <a class="brand st-brand" href="/" aria-label="Apex"><span class="st-mark" aria-hidden="true"></span><span>Apex</span></a>
   <h1>${T('Status', 'Status')}</h1>
   <section class="st-hero ${data.state === 'maintenance' ? 'partial' : data.state}">
     <span class="st-icon" aria-hidden="true">${head[0]}</span>
@@ -81,8 +84,8 @@ export async function statusPage(req, res) {
     <ul>${g.models.map((m) => `<li><span class="st-dot ${m.busy ? 'down' : 'ok'}" aria-hidden="true"></span><span class="st-name">${esc(m.name)}</span><small>${m.busy ? T('voll', 'busy') : T('frei', 'free')}</small></li>`).join('')}</ul>
   </details>`;
   }).join('')}
-  <p class="st-foot">${T('„Voll“ heißt: Das kostenlose Limit des Anbieters ist gerade erreicht. VAIs nimmt dann automatisch ein anderes Modell. Die Seite aktualisiert sich jede Minute.', '“Busy” means the provider’s free limit is reached right now. VAIs then automatically uses another model. This page refreshes every minute.')}</p>
-  <p class="st-foot"><a href="/">VAIs</a> · <a href="/datenschutz">${T('Datenschutz', 'Privacy')}</a> · <a href="/impressum">${T('Impressum', 'Legal notice')}</a></p>
+  <p class="st-foot">${T('„Voll“ heißt: Das kostenlose Limit des Anbieters ist gerade erreicht. Apex nimmt dann automatisch ein anderes Modell. Die Seite aktualisiert sich jede Minute.', '“Busy” means the provider’s free limit is reached right now. Apex then automatically uses another model. This page refreshes every minute.')}</p>
+  <p class="st-foot"><a href="/">Apex</a> · <a href="/datenschutz">${T('Datenschutz', 'Privacy')}</a> · <a href="/impressum">${T('Impressum', 'Legal notice')}</a></p>
 </main>
 </body>
 </html>`;

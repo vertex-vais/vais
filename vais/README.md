@@ -1,4 +1,4 @@
-# VAIs
+# Apex
 
 KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Login** mit E-Mail-Bestätigung
@@ -13,7 +13,7 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Nachrichten bearbeiten** (✏️ unter der eigenen Nachricht – ab dort wird neu geantwortet)
 - **Spracheingabe** (🎙️ neben Senden) und **Vorlesen** (🔊 an jeder Antwort), direkt über den Browser
 - **Einstellungen**: Hell/Dunkel/System, Deutsch/English, Passwort ändern, alle Chats löschen, Konto löschen
-- **Als App installierbar** (PWA) mit eigenem Symbol; schläft der kostenlose Server, erscheint „VAIs wacht auf …“ statt einer leeren Seite
+- **Als App installierbar** (PWA) mit eigenem Symbol; schläft der kostenlose Server, erscheint „Apex wacht auf …“ statt einer leeren Seite
 - **Antworten**: farbiger Code mit Kopier-Knopf, Mathe-Formeln (KaTeX), 3 **Vorschläge für die nächste Frage** unter jeder Antwort, **automatische Chat-Titel**
 - **Offline lesen**: die letzten 25 Chats liegen auf dem Gerät und lassen sich ohne Internet öffnen (beim Abmelden gelöscht)
 - **Willkommens-Tour** beim ersten Besuch (in den Einstellungen wiederholbar), sanfte Animationen und kurzes Vibrieren beim Senden/Abstimmen (Android)
@@ -34,14 +34,14 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Jugendschutz** (Llama Guard, kostenlos bei Groq): blockt Gewalt, Hass, sexuelle Inhalte, Waffen; bei Selbstverletzung Hilfe-Nummern; im Admin-Bereich abschaltbar
 - **👎 mit Gründen** (Auswertung pro Modell im Admin-Bereich), **Status-Seite** (`/status`), **Warnungen für Admins** per Push
 - **Plan zuerst** (Agent X bei großen Aufgaben), **Kamera-Knopf** (+ → Foto aufnehmen), **QR-Codes** zum Teilen
-- **6 Sprachen**: Deutsch, Englisch und Türkisch, Spanisch, Französisch, Ukrainisch (von VAIs selbst übersetzt; nach neuen Texten `npm run strings`)
+- **6 Sprachen**: Deutsch, Englisch und Türkisch, Spanisch, Französisch, Ukrainisch (von Apex selbst übersetzt; nach neuen Texten `npm run strings`)
 - **Nachrichten vormerken**: Schreiben, während die KI antwortet → grau vorgemerkt, wird danach automatisch gesendet; „↑ Jetzt einbringen“ gibt sie Agent X direkt in die laufende Arbeit
 - **✨ Nachricht verbessern**, **wischbare Tabellen** auf dem Handy
 - **Rollen**: Admins machen Nutzer zu **Mods** (sperren, Webseiten entfernen, Übersicht – keine Schlüssel/Limits/Einstellungen)
 - **Mitteilungen** vom Admin an alle oder bestimmte Personen (Push + Hinweis in der App, mit „gelesen“-Zähler)
 - **Team-Chat** (nur Admins und Mods): Gruppen, live, die KI antwortet auf **@KI**, Benachrichtigungen bei neuen Nachrichten
 - **Inkognito-Chats** (werden nicht gespeichert, verschwinden beim Verlassen) und **„Was ist neu?“** nach Updates (`public/changelog.js`)
-- **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
+- **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, **API-Keys** für alle Anbieter (Cursor, NVIDIA, Groq, Gemini, OpenRouter, Cerebras, Mistral, Together, Pollinations, Tavily, Exa, Jina, GitHub Models und ein eigener OpenAI-kompatibler Endpunkt) verschlüsselt verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar). Gespeicherte Schlüssel haben Vorrang, Umgebungsvariablen sind der Ersatz. NVIDIA (kostenloses Kontingent) ist nur für Admins und wird nie für normale Nutzer verwendet.
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)
 
@@ -62,7 +62,8 @@ Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 2. **Senders, Domains & Dedicated IPs → Senders → Add a sender** → deine Gmail-Adresse eintragen und den Link in der Bestätigungs-Mail antippen.
 3. **SMTP & API → API-Schlüssel** → „API-Schlüssel generieren“ → kopieren (beginnt mit `xkeysib-`) → das ist `BREVO_API_KEY`.
    (Alternativ geht SMTP mit `SMTP_USER` + `SMTP_PASS`; ist `BREVO_API_KEY` gesetzt, wird SMTP ignoriert.)
-4. `MAIL_FROM` = `VAIs <deine-adresse@gmail.com>` (genau die bestätigte Adresse).
+4. `MAIL_FROM` = `Apex <deine-adresse@gmail.com>` (genau die bestätigte Adresse). Ein alter Anzeigename `VAIs` wird beim Versand automatisch zu Apex.
+5. `KEY_ENCRYPTION_SECRET` = langer Zufallswert (`openssl rand -base64 32`). Damit verschlüsselt der Admin-Bereich die Cursor-API-Keys (AES-256-GCM). Setzen, bevor der erste Key gespeichert wird. Fehlt die Variable, leitet der Server den Schlüssel aus `DATABASE_TOKEN` (sonst `SMTP_PASS`, `BREVO_API_KEY`, `GOOGLE_CLIENT_SECRET`) ab und warnt im Log. `CURSOR_API_KEY` ist nur der Ersatz, wenn im Admin kein aktiver Key frei ist.
 
 ### 3. KI-Modelle: OpenRouter
 1. openrouter.ai → **Sign in** (mit Google oder GitHub).
@@ -75,7 +76,7 @@ Weitere kostenlose Modelle (optional, je ein Schlüssel in Render unter **Enviro
 - **Mistral** (API nur mit bezahltem Plan): console.mistral.ai → `MISTRAL_API_KEY`
 - Kostenpflichtige Modelle wie **Grok**, Claude oder GPT: Guthaben bei OpenRouter aufladen und die IDs in `OPENROUTER_EXTRA_MODELS` eintragen (durch Komma getrennt, z. B. `x-ai/grok-4.7,x-ai/grok-4.3`). Sie erscheinen als **Premium**; jeder Nutzer darf sie höchstens `PAID_DAILY_LIMIT` Mal pro Tag nutzen (Standard 20).
 
-Fällt ein Modell aus (z. B. Tageslimit), merkt sich VAIs das und überspringt es; im Battle springt automatisch ein anderes Modell ein.
+Fällt ein Modell aus (z. B. Tageslimit), merkt sich Apex das und überspringt es; im Battle springt automatisch ein anderes Modell ein.
 
 Kostenlose Modelle haben ein Tageslimit (ca. 50 Anfragen pro Tag; mit einmalig 10 $ Guthaben bei OpenRouter ca. 1.000 pro Tag).
 
@@ -83,7 +84,7 @@ Kostenlose Modelle haben ein Tageslimit (ca. 50 Anfragen pro Tag; mit einmalig 1
 1. render.com → mit GitHub anmelden → Zugriff auf das Repo `Vertex` erlauben.
 2. **New → Blueprint** → Repo `Vertex` wählen, Branch `claude/vais-login`.
 3. Render fragt die 6 Werte ab: `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `OPENROUTER_API_KEY`, `DATABASE_URL`, `DATABASE_TOKEN` → einfügen → **Apply**.
-4. Nach ein paar Minuten ist VAIs unter `https://vais-xxxx.onrender.com` online.
+4. Nach ein paar Minuten ist Apex unter `https://vais-xxxx.onrender.com` online.
 
 Hinweis: Im Gratis-Tarif schläft die Seite nach 15 Minuten ohne Besucher ein; der erste Aufruf danach dauert ca. 1 Minute. Die Konten bleiben dank Turso trotzdem erhalten.
 
@@ -99,11 +100,11 @@ npm start
 
 Dann im Browser http://localhost:3000 öffnen.
 
-Ohne E-Mail-Einstellungen läuft VAIs im **Entwicklungsmodus**: Der 6-stellige Code wird nicht verschickt, sondern im Terminal angezeigt, in dem `npm start` läuft.
+Ohne E-Mail-Einstellungen läuft Apex im **Entwicklungsmodus**: Der 6-stellige Code wird nicht verschickt, sondern im Terminal angezeigt, in dem `npm start` läuft.
 
 ## So funktioniert der Login
 
-1. E-Mail eingeben → VAIs erkennt, ob es schon ein Konto gibt.
+1. E-Mail eingeben → Apex erkennt, ob es schon ein Konto gibt.
 2. **Neu:** Passwort wählen → Code per E-Mail → Code eingeben → Konto ist aktiv.
    **Bestehend:** Passwort eingeben → angemeldet.
 3. *Passwort vergessen?* schickt einen Code, mit dem ein neues Passwort gesetzt wird (alle anderen Geräte werden dabei abgemeldet).
@@ -137,5 +138,5 @@ Sicherheit: Content-Security-Policy, Schutz vor fremden Webseiten (CSRF), Sperre
 | `public/styles.css` | Gemeinsames Design (hell/dunkel) |
 | `public/i18n.js`, `src/i18n.js` | Deutsch/Englisch (Oberfläche und Server) |
 | `public/boot.js` | Sprache, Design und Service Worker beim Start |
-| `public/sw.js`, `waking.html` | App-Installation und „VAIs wacht auf“-Seite |
+| `public/sw.js`, `waking.html` | App-Installation und „Apex wacht auf“-Seite |
 | `public/sandbox.html` | Abgeschirmte Vorschau für erstellte Webseiten |

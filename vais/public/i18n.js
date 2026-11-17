@@ -1,7 +1,7 @@
 // Sprachen der Oberfläche. Deutsch und Englisch stehen direkt im Code:
 // Im HTML: data-en="English" (Text), data-en-placeholder, data-en-aria-label, data-en-title
 // Im Code: t('Deutsch', 'English')
-// Türkisch, Spanisch, Französisch und Ukrainisch übersetzt VAIs aus dem Englischen (/i18n/<sprache>.json).
+// Türkisch, Spanisch, Französisch und Ukrainisch übersetzt Apex aus dem Englischen (/i18n/<sprache>.json).
 export const EXTRA_LANGS = ['tr', 'es', 'fr', 'uk'];
 export const LANGUAGES = [
   ['de', 'Deutsch'], ['en', 'English'], ['tr', 'Türkçe'], ['es', 'Español'], ['fr', 'Français'], ['uk', 'Українська'],

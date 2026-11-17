@@ -1,4 +1,4 @@
-// Effekte für VAIs: lebendiges Logo, Himmel je nach Tageszeit, 3D-Karten (Beta) und geheime Befehle.
+// Effekte für Apex: lebendiges Logo, Himmel je nach Tageszeit, 3D-Karten (Beta) und geheime Befehle.
 // Alles respektiert „Bewegung reduzieren“ und lässt sich in den Einstellungen abschalten.
 const quiet = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const pref = (key, def = true) => { try { const v = localStorage.getItem(key); return v === null ? def : v === 'on'; } catch { return def; } };
@@ -126,7 +126,7 @@ function holeCenter(ms) {
 // 1. Erscheinen: Dunkelheit, Sterne, das Schwarze Loch wächst mit glühender Scheibe
 // 2. Sog: Sterne spiralen hinein, die App wird eingesaugt
 // 3. Hyper-Sprung: Lichtblitz, Sterne schießen mit Lichtgeschwindigkeit heraus, Bildschirm bebt
-// 4. Ankunft: bunte Nebel, Sternschnuppe, „VAIs Galaxie“ – dann ist alles wieder da
+// 4. Ankunft: bunte Nebel, Sternschnuppe, „Apex Galaxie“ – dann ist alles wieder da
 function warp() {
   const TOTAL = 6600;
   const P1 = 1200, P2 = 2700, P3 = 4700;
@@ -242,7 +242,7 @@ function warp() {
 function title(ms) {
   const el = document.createElement('div');
   el.className = 'fx-title';
-  el.innerHTML = '<b>VAIs Galaxie</b><span>✦ willkommen im All ✦</span>';
+  el.innerHTML = '<b>Apex Galaxie</b><span>✦ willkommen im All ✦</span>';
   document.body.append(el);
   setTimeout(() => el.remove(), ms);
 }

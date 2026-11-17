@@ -18,6 +18,7 @@ import { sites } from './sites.js';
 import { checkText } from './safety.js';
 import { limitSettings, charge, refund, usageOf, usageHistory } from './limits.js';
 import { sourcesFromText } from './models.js';
+import { getActiveProviderKey, noteProviderKeyFailure } from './providerKeys.js';
 import { pickAvailable, isBusy } from './models.js';
 import { generateImage, editImage, helperModel, complete, transcribe } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode, rankModels } from './models.js';
@@ -121,8 +122,8 @@ setInterval(() => {
 }, 10 * 60 * 1000).unref();
 
 // Agent X steht als eigenes „Modell“ ganz oben in der Liste
-const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'VAIs', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
-const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'VAIs', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
+const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'Apex', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
+const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'Apex', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
   res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
@@ -891,7 +892,8 @@ chat.post('/tts', wrap(async (req, res) => {
   helperQuota(req, 'tts');
   const key = `${voice}:${text}`;
   let buf = ttsCache.get(key);
-  const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
+  const pollinations = await getActiveProviderKey('pollinations');
+  const apiKey = pollinations?.key || '';
   // Pollinations verlangt für Sprache inzwischen einen (kostenlosen) Schlüssel
   if (!buf && !apiKey) throw new HttpError(501, t('Für die Online-Stimme fehlt der Pollinations-Schlüssel (POLLINATIONS_API_KEY).', 'The online voice needs a Pollinations key (POLLINATIONS_API_KEY).'));
   if (!buf) {
@@ -902,7 +904,10 @@ chat.post('/tts', wrap(async (req, res) => {
           signal: AbortSignal.timeout(30_000),
         });
         if (r.ok && /audio/.test(r.headers.get('content-type') ?? '')) return Buffer.from(await r.arrayBuffer());
-        if (r.status === 401 || r.status === 402 || r.status === 403) throw Object.assign(new Error(t('Der Pollinations-Schlüssel wird nicht akzeptiert oder das Guthaben ist aufgebraucht.', 'The Pollinations key was rejected or its credit is used up.')), { status: 501 });
+        if (r.status === 401 || r.status === 402 || r.status === 403) {
+          if (r.status === 401 || r.status === 429) noteProviderKeyFailure(pollinations?.id, r.status);
+          throw Object.assign(new Error(t('Der Pollinations-Schlüssel wird nicht akzeptiert oder das Guthaben ist aufgebraucht.', 'The Pollinations key was rejected or its credit is used up.')), { status: 501 });
+        }
         if (r.status !== 429) throw new Error(`Sprachausgabe fehlgeschlagen (${r.status}).`);
         await new Promise((ok) => setTimeout(ok, 1500 * (attempt + 1)));
       }
@@ -1020,7 +1025,7 @@ chat.get('/export', wrap(async (req, res) => {
   ]);
   const file = {
     exportedAt: new Date().toISOString(),
-    service: 'VAIs',
+    service: 'Apex',
     account: { email: user.email, created: new Date(Number(user.created_at)).toISOString() },
     settings: { instructions: user.instructions ?? '', memory: !user.memory_off, ownDailyLimit: user.daily_limit ?? null },
     memories: memories.map((m) => ({ text: m.text, created: new Date(Number(m.created_at)).toISOString() })),
@@ -1029,7 +1034,7 @@ chat.get('/export', wrap(async (req, res) => {
     kontostand: konto?.count ? { balanceEuro: konto.balance / 100, entries: [...konto.entries].reverse().map((e) => ({ day: e.day, amountEuro: e.amount / 100, note: e.note, kind: e.kind })) } : null,
     chats: out,
   };
-  res.set('Content-Disposition', `attachment; filename="vais-daten-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.set('Content-Disposition', `attachment; filename="apex-daten-${new Date().toISOString().slice(0, 10)}.json"`);
   res.type('application/json').send(JSON.stringify(file, null, 2));
 }));
 

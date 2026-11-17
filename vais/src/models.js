@@ -2,7 +2,7 @@
 //   OPENROUTER_API_KEY  → kostenlose OpenRouter-Modelle (Endung ":free")
 //   GEMINI_API_KEY      → Google Gemini / Gemma (Google AI Studio, kostenloses Kontingent)
 //   GROQ_API_KEY        → Groq (gpt-oss-120b/20b mit Websuche, Qwen)
-// Ohne Schlüssel läuft VAIs im Demo-Modus mit Platzhalter-Modellen.
+// Ohne Schlüssel läuft Apex im Demo-Modus mit Platzhalter-Modellen.
 //
 // Optional: OPENROUTER_EXTRA_MODELS="anthropic/claude-sonnet-4.5,openai/gpt-5" schaltet
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
@@ -10,6 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { t } from './i18n.js';
 import { getSetting, setSetting } from './db.js';
+import { keysForUser, noteFailureBySecret, peekProviderKey, getActiveProviderKey, cachedKeys, isAdminOnlyProvider } from './providerKeys.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
 const IDLE_TIMEOUT = 75_000; // so lange darf ein Modell bis zum ersten Lebenszeichen brauchen
@@ -33,6 +34,7 @@ const PROVIDER_LIST = {
   groq: { base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
   cerebras: { base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
   mistral: { base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
+  github: { base: 'https://models.github.ai/inference', label: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN' },
 };
 const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p]) => {
   const fromEnv = envKeys(p.env);
@@ -40,7 +42,19 @@ const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p
     ...p,
     name,
     fromEnv,
-    get keys() { return [...new Set([...fromEnv, ...(adminKeys[name] ?? [])])]; },
+    // Gespeicherte Schlüssel zuerst. Sind sie alle in der Pause, gelten die Umgebungsvariablen.
+    // adminOnly (NVIDIA) kommt hier nie an – auch nicht über eine Env-Variable.
+    get keys() {
+      if (isAdminOnlyProvider(name)) return [];
+      const panel = keysForUser(name);
+      const now = Date.now();
+      if (panel.some((k) => (keyCooldown.get(`k:${name}:${k}`) ?? 0) <= now)) return [...new Set(panel)];
+      return [...new Set([...fromEnv, ...(adminKeys[name] ?? [])])].filter((k) => !panel.includes(k));
+    },
+    get roster() {
+      if (isAdminOnlyProvider(name)) return [];
+      return [...new Set([...keysForUser(name), ...fromEnv, ...(adminKeys[name] ?? [])])];
+    },
     get key() { return freeKeys(name)[0] ?? this.keys[0]; }, // ein gerade freier Schlüssel
   }];
 }));
@@ -62,6 +76,7 @@ function markKey(provider, model, key, status, message) {
   if (status === 429 && isDailyLimit(message)) { keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc()); queueMicrotask(() => alarmHandler('key-full', info)); }
   else if (status === 401 || status === 403) { keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000); queueMicrotask(() => alarmHandler('key-invalid', info)); }
   else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + Math.min(90_000, (retryAfterMs(message) ?? 90_000) + 500));
+  if (status === 401 || status === 429) noteFailureBySecret(provider, key, status);
 }
 const maskKey = (k) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 // „Please try again in 7.9s“ / „in 1m3.5s“ / „in 450ms“ → Millisekunden
@@ -152,11 +167,12 @@ export function keyStatus() {
     provider: p.name,
     label: p.label,
     env: p.env,
-    keys: p.keys.map((k) => {
+    keys: (p.roster ?? p.keys).map((k) => {
       const until = keyCooldown.get(`k:${p.name}:${k}`) ?? 0;
       const limited = [...keyCooldown.entries()].some(([id, ts]) => id.startsWith('m:') && id.endsWith(`:${k}`) && ts > now);
       const u = keyUsageOf(p.name, k);
-      return { id: maskKey(k), source: p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok',
+      const fromPanel = keysForUser(p.name).includes(k);
+      return { id: maskKey(k), source: fromPanel ? 'panel' : p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok',
         usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits } : null };
     }),
   }));
@@ -233,7 +249,7 @@ export async function rawModelIds(provider) {
 // Bilder: Pollinations funktioniert ohne Schlüssel (wenige Modelle); mit POLLINATIONS_API_KEY gibt es mehr.
 // Mit DISABLE_FREE_IMAGES=true lässt sich der Bild-Modus abschalten.
 const IMAGES = {
-  key: process.env.POLLINATIONS_API_KEY?.trim(),
+  get key() { return peekProviderKey('pollinations')?.key || ''; },
   enabled: process.env.DISABLE_FREE_IMAGES !== 'true',
   label: 'Pollinations',
   env: 'POLLINATIONS_API_KEY',
@@ -390,6 +406,14 @@ const LISTERS = {
       .map((m) => makeModel('mistral', m.id, m.id.replace(/-latest$/, ''), 'Mistral'));
   },
 
+  async github(p) {
+    const { data = [] } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
+    return data
+      .filter((m) => m.id && !/(embed|whisper|tts|moderation|audio)/i.test(m.id))
+      .slice(0, 40)
+      .map((m) => makeModel('github', m.id, String(m.id).split('/').pop(), m.owned_by || 'GitHub'));
+  },
+
   async groq(p) {
     const { data } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
     return data
@@ -407,23 +431,22 @@ const LISTERS = {
 };
 
 const DEMO_MODELS = [
-  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code', 'vision'] },
-  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'vision'] },
-  { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code'] },
-  { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'VAIs Demo', icon: null, caps: ['text'] },
-  { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
-  { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
-  { id: 'demo:prisma', provider: 'demo', upstream: 'prisma', name: 'prisma-image-demo', maker: 'VAIs Demo', icon: null, caps: ['image'] },
-  { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'VAIs Demo', icon: null, caps: ['image'] },
+  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'code', 'vision'] },
+  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'vision'] },
+  { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'code'] },
+  { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'Apex Demo', icon: null, caps: ['text'] },
+  { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'Apex Demo', icon: null, caps: ['web'] },
+  { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'Apex Demo', icon: null, caps: ['web'] },
+  { id: 'demo:prisma', provider: 'demo', upstream: 'prisma', name: 'prisma-image-demo', maker: 'Apex Demo', icon: null, caps: ['image'] },
+  { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'Apex Demo', icon: null, caps: ['image'] },
 ];
 
-const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5 };
+const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5, github: 6, custom: 7 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
-  if (demoMode) return DEMO_MODELS;
-  const sources = Object.entries(PROVIDERS).map(([name, p]) => [name, p, () => LISTERS[name](p)]);
-  if (IMAGES.enabled) sources.push(['pollinations', { ...IMAGES, key: 'free' }, listImageModels]);
+  const sources = demoMode ? [] : Object.entries(PROVIDERS).map(([name, p]) => [name, p, () => LISTERS[name](p)]);
+  if (!demoMode && IMAGES.enabled) sources.push(['pollinations', { ...IMAGES, key: 'free' }, listImageModels]);
   const lists = await Promise.all(sources.map(async ([name, p, lister]) => {
     if (!p.key && !p.keys?.length) return [];
     const c = cache[name];
@@ -436,9 +459,14 @@ export async function listModels() {
     }
     return cache[name]?.list ?? [];
   }));
+  const custom = cachedKeys('custom').filter((k) => k.baseUrl && k.model).map((k) => ({
+    id: `custom:${k.id}`, provider: 'custom', upstream: String(k.id), name: k.model, maker: k.label || 'Custom', icon: null, caps: ['text', 'code'],
+  }));
+  if (demoMode) return custom.length ? [...DEMO_MODELS, ...custom] : DEMO_MODELS;
   return lists.flat()
     .map((m) => ({ ...m, busy: isBusy(m.id) }))
-    .sort((a, b) => ORDER[a.provider] - ORDER[b.provider] || a.name.localeCompare(b.name));
+    .sort((a, b) => (ORDER[a.provider] ?? 9) - (ORDER[b.provider] ?? 9) || a.name.localeCompare(b.name))
+    .concat(custom);
 }
 
 // ── Ausgelastete Modelle merken und überspringen ─────────────────
@@ -490,8 +518,8 @@ export function modelKey(id) {
   return id.replace(/^openrouter:/, '').replace(/#search$/, '');
 }
 export async function describeModel(id) {
-  if (id === 'agent') return { name: 'Agent X', maker: 'VAIs', icon: 'vais' };
-  if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'VAIs', icon: 'vais' };
+  if (id === 'agent') return { name: 'Agent X', maker: 'Apex', icon: 'vais' };
+  if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'Apex', icon: 'vais' };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
   const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
@@ -580,7 +608,7 @@ export async function streamChat({ model, messages, signal, think = false, onTex
   const headersFor = (key) => ({
     Authorization: `Bearer ${key}`,
     'Content-Type': 'application/json',
-    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'VAIs' } : {}),
+    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'Apex' } : {}),
   });
   // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
   const idle = new AbortController();
@@ -870,14 +898,19 @@ const STRONG_IMAGE = [
   },
   {
     name: 'together',
-    available: () => !!String(process.env.TOGETHER_API_KEY ?? '').trim(),
+    available: () => !!peekProviderKey('together')?.key,
     async make(prompt, signal) {
+      const got = await getActiveProviderKey('together');
+      if (!got?.key) throw Object.assign(new Error('Together: kein Schlüssel'), { status: 401 });
       const res = await fetch('https://api.together.xyz/v1/images/generations', {
         method: 'POST', signal: timed(signal, 120_000),
-        headers: { Authorization: `Bearer ${String(process.env.TOGETHER_API_KEY).trim()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${got.key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: String(process.env.TOGETHER_IMAGE_MODEL ?? '').trim() || 'black-forest-labs/FLUX.1-schnell', prompt, width: 1024, height: 1024, steps: 4, n: 1, response_format: 'b64_json' }),
       });
-      if (!res.ok) throw Object.assign(new Error(`Together ${res.status}`), { status: res.status });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 429) noteFailureBySecret('together', got.key, res.status);
+        throw Object.assign(new Error(`Together ${res.status}`), { status: res.status });
+      }
       const data = await res.json();
       const b64 = data.data?.[0]?.b64_json;
       if (b64) return `data:image/png;base64,${b64}`;
@@ -911,15 +944,17 @@ async function makeImage({ model, prompt, signal, reference }) {
     }
   }
   const seed = Math.floor(Math.random() * 1_000_000);
+  const imageKey = await getActiveProviderKey('pollinations');
   // enhance=false: wir schreiben den Prompt schon selbst um; nologo/hohe Auflösung greifen mit Schlüssel
   const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true&enhance=false${reference ? `&image=${encodeURIComponent(reference)}` : ''}`;
-  const url = IMAGES.key
+  const url = imageKey?.key
     ? `https://gen.pollinations.ai/image/${encodeURIComponent(text)}?${query}`
     : `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?${query}`;
   const res = await fetch(url, {
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
-    headers: IMAGES.key ? { Authorization: `Bearer ${IMAGES.key}` } : {},
+    headers: imageKey?.key ? { Authorization: `Bearer ${imageKey.key}` } : {},
   });
+  if (imageKey?.key && (res.status === 401 || res.status === 429)) noteFailureBySecret('pollinations', imageKey.key, res.status);
   const type = res.headers.get('content-type') || '';
   if (!res.ok || !type.startsWith('image/')) {
     const body = await res.text().catch(() => '');
@@ -942,6 +977,28 @@ function demoImage(name, text) {
 export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000 }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
+  if (provider === 'custom') {
+    const row = cachedKeys('custom').find((k) => String(k.id) === upstream);
+    if (!row?.key || !row.baseUrl) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
+    const res = await fetch(`${row.baseUrl}/chat/completions`, {
+      method: 'POST',
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
+      headers: { Authorization: `Bearer ${row.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: row.model, messages, ...(maxTokens ? { max_tokens: maxTokens } : { max_tokens: MAX_OUTPUT_TOKENS }) }),
+    });
+    if (res.status === 401 || res.status === 429) noteFailureBySecret('custom', row.key, res.status);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const err = Array.isArray(body) ? body[0]?.error : body?.error;
+      throw fail(model, res.status, err?.message, { label: row.label || 'Custom', env: 'CUSTOM_OPENAI_API_KEY' });
+    }
+    const json = await res.json();
+    noteOk(model);
+    const message = json.choices?.[0]?.message ?? { content: '' };
+    message.finish = json.choices?.[0]?.finish_reason ?? null;
+    message.sources = sourcesFromData({ m: { ...message, content: undefined }, citations: json.citations });
+    return message;
+  }
   const search = upstream.endsWith(SEARCH_SUFFIX);
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   const p = PROVIDERS[provider];
@@ -953,7 +1010,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'VAIs' } : {}),
+      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'Apex' } : {}),
     },
     body: JSON.stringify({
       model: upstream,

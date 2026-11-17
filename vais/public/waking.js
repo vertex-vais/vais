@@ -5,12 +5,12 @@
   var $ = function (id) { return document.getElementById(id); };
 
   if (en) {
-    $('w-title').textContent = 'VAIs is waking up …';
+    $('w-title').textContent = 'Apex is waking up …';
     $('w-text').textContent = 'The free server sleeps when nobody has visited for a while. Waking up takes up to a minute – the page will reload by itself.';
   }
   if (offline) {
     $('w-title').textContent = en ? 'You are offline' : 'Du bist offline';
-    $('w-text').textContent = en ? 'VAIs will load as soon as you are back online.' : 'VAIs lädt, sobald du wieder Internet hast.';
+    $('w-text').textContent = en ? 'Apex will load as soon as you are back online.' : 'Apex lädt, sobald du wieder Internet hast.';
   }
 
   var start = Date.now();

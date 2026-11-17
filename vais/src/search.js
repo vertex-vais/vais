@@ -3,13 +3,26 @@
 // Seiten lesen: direkt (mit Schutz vor internen Adressen), bei Fehlern oder JavaScript-Seiten über Jina Reader (geht ohne Schlüssel).
 // Fehlt ein Schlüssel, wird der Anbieter still übersprungen. Ergebnisse 10 Minuten im Speicher.
 import { complete, rankModels, listModels, makeSource, demoMode } from './models.js';
+import { peekProviderKey, getActiveProviderKey, noteProviderKeyFailure } from './providerKeys.js';
 import { registerCache } from './stability.js';
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
 import { lang, t } from './i18n.js';
 
-const keyOf = (name) => String(process.env[name] ?? '').trim();
-const UA = 'VAIs-Search/1.0 (https://vais-dvvk.onrender.com)';
+const ENV_PROVIDER = { TAVILY_API_KEY: 'tavily', EXA_API_KEY: 'exa', JINA_API_KEY: 'jina', GROQ_API_KEY: 'groq' };
+const keyOf = (name) => {
+  const id = ENV_PROVIDER[name];
+  if (id) {
+    const got = peekProviderKey(id);
+    if (got?.key) return got.key;
+  }
+  return String(process.env[name] ?? '').trim();
+};
+async function takeKey(provider) {
+  const got = await getActiveProviderKey(provider);
+  return got ?? { key: '' };
+}
+const UA = 'Apex-Search/1.0 (https://vais-dvvk.onrender.com)';
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const timeout = (signal, ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
 const strip = (html) => String(html ?? '').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
@@ -27,7 +40,8 @@ export function searchStatus() {
 
 const PROVIDERS = {
   async tavily(query, { max, signal }) {
-    const key = keyOf('TAVILY_API_KEY');
+    const got = await takeKey('tavily');
+    const key = got.key;
     if (!key) return null;
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
@@ -35,13 +49,17 @@ const PROVIDERS = {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, max_results: max, search_depth: 'basic', include_answer: false, include_raw_content: false }),
     });
-    if (!res.ok) throw new Error(`Tavily ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 429) noteProviderKeyFailure(got.id, res.status);
+      throw new Error(`Tavily ${res.status}`);
+    }
     const data = await res.json();
     return (data.results ?? []).map((r) => ({ url: r.url, title: r.title, snippet: r.content, date: r.published_date ?? null }));
   },
 
   async exa(query, { max, signal }) {
-    const key = keyOf('EXA_API_KEY');
+    const got = await takeKey('exa');
+    const key = got.key;
     if (!key) return null;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
@@ -49,20 +67,27 @@ const PROVIDERS = {
       headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, numResults: max, type: 'auto', contents: { text: { maxCharacters: 900 } } }),
     });
-    if (!res.ok) throw new Error(`Exa ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 429) noteProviderKeyFailure(got.id, res.status);
+      throw new Error(`Exa ${res.status}`);
+    }
     const data = await res.json();
     return (data.results ?? []).map((r) => ({ url: r.url, title: r.title, snippet: r.text ?? r.summary ?? '', date: r.publishedDate ?? null }));
   },
 
   // Jina Search braucht einen (kostenlosen) Schlüssel
   async jina(query, { max, signal }) {
-    const key = keyOf('JINA_API_KEY');
+    const got = await takeKey('jina');
+    const key = got.key;
     if (!key) return null;
     const res = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
       signal: timeout(signal, 15_000),
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json', 'X-Respond-With': 'no-content' },
     });
-    if (!res.ok) throw new Error(`Jina ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 429) noteProviderKeyFailure(got.id, res.status);
+      throw new Error(`Jina ${res.status}`);
+    }
     const data = await res.json();
     return (data.data ?? []).slice(0, max).map((r) => ({ url: r.url, title: r.title, snippet: r.description ?? r.content ?? '', date: r.date ?? null }));
   },
@@ -218,7 +243,7 @@ async function readDirect(url, signal) {
     res = await fetch(url, {
       redirect: 'manual',
       signal: timeout(signal, 12_000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VAIs-AgentX/1.0)', Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Apex-AgentX/1.0)', Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' },
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       url = await assertPublicUrl(new URL(res.headers.get('location'), url).href);
@@ -247,12 +272,16 @@ async function readDirect(url, signal) {
 
 // Jina Reader: liest auch JavaScript-Seiten und PDFs und liefert sauberen Text (ohne Schlüssel ca. 20 Seiten/Minute)
 async function readJina(url, signal) {
-  const key = keyOf('JINA_API_KEY');
+  const got = await takeKey('jina');
+  const key = got.key;
   const res = await fetch(`https://r.jina.ai/${url.href}`, {
     signal: timeout(signal, 25_000),
     headers: { Accept: 'text/plain', 'X-Return-Format': 'markdown', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
   });
-  if (!res.ok) throw new Error(`Jina Reader ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 429) noteProviderKeyFailure(got.id, res.status);
+    throw new Error(`Jina Reader ${res.status}`);
+  }
   const raw = (await res.text()).slice(0, 400_000);
   const title = raw.match(/^Title:\s*(.+)$/m)?.[1]?.trim() ?? '';
   const text = (raw.split(/^Markdown Content:\s*$/m)[1] ?? raw).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();

@@ -147,7 +147,7 @@ async function loginNotice(userId, device) {
   const { notifyUser } = await import('./push.js');
   const time = new Date().toLocaleTimeString(lang() === 'de' ? 'de-DE' : 'en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
   await notifyUser(userId, {
-    title: t('Neue Anmeldung bei VAIs', 'New sign-in to VAIs'),
+    title: t('Neue Anmeldung bei Apex', 'New sign-in to Apex'),
     body: t(`${device} um ${time} Uhr. Warst du das nicht? Tippe hier und melde das Gerät ab.`, `${device} at ${time}. Not you? Tap here to sign that device out.`),
     url: '/#geraete',
     tag: 'login',

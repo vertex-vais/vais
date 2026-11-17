@@ -65,7 +65,7 @@ export function matches(userText, faqQuestion) {
   if (!cu.length || !cf.length) return false;
   const d = wordDistance(cu, cf);
   if (d === 0) return true;
-  // gleiche wichtige Wörter, nur andere Reihenfolge („Wer hat VAIs gemacht“ ↔ „VAIs gemacht hat wer“)
+  // gleiche wichtige Wörter, nur andere Reihenfolge („Wer hat Apex gemacht“ ↔ „Apex gemacht hat wer“)
   const su = new Set(cu), sf = new Set(cf);
   if (su.size === sf.size && [...su].every((w) => [...sf].some((x) => sameWord(w, x)))) return true;
   return d <= 1 && Math.min(cu.length, cf.length) >= 4;

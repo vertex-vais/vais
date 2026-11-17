@@ -1,5 +1,5 @@
 // Führt Python-Code aus (Pyodide) – abgeschirmt: eigener Ursprung, in einem Web Worker,
-// der nach einer Zeitgrenze hart beendet wird. Kein Zugriff auf VAIs, Cookies oder Login.
+// der nach einer Zeitgrenze hart beendet wird. Kein Zugriff auf Apex, Cookies oder Login.
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 const WORKER = `
 importScripts('${PYODIDE}pyodide.js');

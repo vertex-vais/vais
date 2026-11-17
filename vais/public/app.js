@@ -447,7 +447,7 @@ function renderModelList() {
         return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}${m.agent || m.auto ? ' is-agent' : ''}" data-id="${escapeHtml(m.id)}">
           ${modelLogo(m)}<span class="name">${m.auto ? '✨ ' : ''}${escapeHtml(m.name)}</span>${m.agent ? `<span class="agent-tag">${t('Agent', 'Agent')}</span>` : m.auto ? `<span class="agent-tag">${t('Auto', 'Auto')}</span>` : ''}${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${m.agent ? t('VAIs · der Stärkste', 'VAIs · the strongest') : m.auto ? t('VAIs wählt pro Frage das beste Modell', 'VAIs picks the best model for each question') : m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
+          <span class="prov">${m.agent ? t('Apex · der Stärkste', 'Apex · the strongest') : m.auto ? t('Apex wählt pro Frage das beste Modell', 'Apex picks the best model for each question') : m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
     : `<li class="model-empty">${q ? t('Kein Modell gefunden.', 'No model found.') : CAP_EMPTY[sheetCap] ?? t('Keine Modelle in dieser Kategorie.', 'No models in this category.')}</li>`;
 }
@@ -782,8 +782,8 @@ function paintLabel(card, side) {
   if (a?.faq) {
     const note = document.createElement('span');
     note.className = 'fallback-tag';
-    note.title = t('Diese Antwort hat das VAIs-Team selbst geschrieben – sie kam sofort und hat nichts verbraucht.', 'The VAIs team wrote this answer – it came instantly and used nothing.');
-    note.textContent = t('📌 Antwort vom VAIs-Team', '📌 Answer from the VAIs team');
+    note.title = t('Diese Antwort hat das Apex-Team selbst geschrieben – sie kam sofort und hat nichts verbraucht.', 'The Apex team wrote this answer – it came instantly and used nothing.');
+    note.textContent = t('📌 Antwort vom Apex-Team', '📌 Answer from the Apex team');
     label.append(note);
   }
   if (a?.cached && chat.mode !== 'battle') {
@@ -2401,7 +2401,7 @@ function openTranslator() {
   $('#tr-a').value = saved.a;
   $('#tr-b').value = saved.b;
   trPaint();
-  if (!$('#tr-log').children.length) $('#tr-log').innerHTML = `<li class="tr-hint">${canRecord || SpeechRec ? t('Tippe auf deine Sprache und sprich. VAIs übersetzt und liest die Übersetzung laut vor – dann ist die andere Person dran.', 'Tap your language and speak. VAIs translates and reads the translation aloud – then it is the other person’s turn.') : t('Tippe deinen Satz unten ein – VAIs übersetzt ihn.', 'Type your sentence below – VAIs translates it.')}</li>`;
+  if (!$('#tr-log').children.length) $('#tr-log').innerHTML = `<li class="tr-hint">${canRecord || SpeechRec ? t('Tippe auf deine Sprache und sprich. Apex übersetzt und liest die Übersetzung laut vor – dann ist die andere Person dran.', 'Tap your language and speak. Apex translates and reads the translation aloud – then it is the other person’s turn.') : t('Tippe deinen Satz unten ein – Apex übersetzt ihn.', 'Type your sentence below – Apex translates it.')}</li>`;
   trEl.hidden = false;
 }
 function closeTranslator() {
@@ -2630,7 +2630,7 @@ function openPreview(turnIndex, side, tab = 'view') {
   $(`[data-ptab="${tab}"]`).focus();
 }
 
-// Webseite in der abgeschirmten Vorschau-Seite anzeigen (eigene Sicherheitsregeln, kein Zugriff auf VAIs)
+// Webseite in der abgeschirmten Vorschau-Seite anzeigen (eigene Sicherheitsregeln, kein Zugriff auf Apex)
 let frameHtml = null;
 window.addEventListener('message', (e) => {
   const frame = $('#preview-frame');
@@ -3469,7 +3469,7 @@ $('#share-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(shareUrl); toast(t('Link kopiert', 'Link copied')); } catch { $('#share-link').select(); }
 });
 $('#share-native').addEventListener('click', () => {
-  navigator.share?.({ title: el.title.textContent || 'VAIs', url: shareUrl }).catch(() => {});
+  navigator.share?.({ title: el.title.textContent || 'Apex', url: shareUrl }).catch(() => {});
 });
 $('#share-stop').addEventListener('click', async () => {
   try {
@@ -3627,7 +3627,7 @@ $('#konto-rows').addEventListener('click', async (e) => {
 const settingsEl = $('#settings');
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
-window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('VAIs wurde installiert 🎉', 'VAIs was installed 🎉')); });
+window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('Apex wurde installiert 🎉', 'Apex was installed 🎉')); });
 
 function paintSettings() {
   $('#set-haptics').checked = hapticsOn();
@@ -3647,9 +3647,9 @@ function paintSettings() {
   $('#set-install-group').hidden = standalone;
   $('#set-install').hidden = !installPrompt;
   $('#set-install-text').textContent = installPrompt
-    ? t('Installiere VAIs als App – mit eigenem Symbol auf deinem Startbildschirm.', 'Install VAIs as an app – with its own icon on your home screen.')
+    ? t('Installiere Apex als App – mit eigenem Symbol auf deinem Startbildschirm.', 'Install Apex as an app – with its own icon on your home screen.')
     : ios
-      ? t('Tippe im Browser auf „Teilen“ (□↑) und dann auf „Zum Home-Bildschirm“. Danach startet VAIs wie eine App.', 'In your browser, tap “Share” (□↑) and then “Add to Home Screen”. VAIs will then open like an app.')
+      ? t('Tippe im Browser auf „Teilen“ (□↑) und dann auf „Zum Home-Bildschirm“. Danach startet Apex wie eine App.', 'In your browser, tap “Share” (□↑) and then “Add to Home Screen”. Apex will then open like an app.')
       : t('Öffne das Browser-Menü (⋮) und wähle „App installieren“ oder „Zum Startbildschirm hinzufügen“.', 'Open the browser menu (⋮) and choose “Install app” or “Add to home screen”.');
 }
 
@@ -3742,7 +3742,7 @@ async function loadPush() {
   if (!pushSupported) {
     on.hidden = true;
     text.textContent = isIos && !isStandalone()
-      ? t('Auf dem iPhone gehen Benachrichtigungen nur, wenn VAIs als App installiert ist (Teilen → „Zum Home-Bildschirm“).', 'On iPhone, notifications only work when VAIs is installed as an app (Share → “Add to Home Screen”).')
+      ? t('Auf dem iPhone gehen Benachrichtigungen nur, wenn Apex als App installiert ist (Teilen → „Zum Home-Bildschirm“).', 'On iPhone, notifications only work when Apex is installed as an app (Share → “Add to Home Screen”).')
       : t('Dieser Browser kann leider keine Benachrichtigungen.', 'This browser does not support notifications.');
   } else if (Notification.permission === 'denied') {
     on.hidden = true;
@@ -3810,7 +3810,7 @@ siteSheet.addEventListener('click', (e) => { if (e.target.closest('[data-close]'
 $('#site-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('#site-link').value); toast(t('Link kopiert', 'Link copied')); } catch { $('#site-link').select(); }
 });
-$('#site-native').addEventListener('click', () => navigator.share?.({ title: siteNow?.title || 'VAIs', url: $('#site-link').value }).catch(() => {}));
+$('#site-native').addEventListener('click', () => navigator.share?.({ title: siteNow?.title || 'Apex', url: $('#site-link').value }).catch(() => {}));
 $('#site-stop').addEventListener('click', async () => {
   if (!siteNow || !confirm(t('Webseite offline nehmen? Der Link funktioniert dann nicht mehr.', 'Take the website offline? The link will stop working.'))) return;
   try { await post('/api/chat/sites/unpublish', { id: siteNow.id }); siteSheet.hidden = true; toast(t('Offline genommen', 'Taken offline')); } catch (err) { toast(err.message); }
@@ -4100,7 +4100,7 @@ function showWelcome() {
     <div class="welcome-sky" aria-hidden="true"></div>
     <div class="welcome-in">
       <div class="welcome-logo" aria-hidden="true">${logo}</div>
-      <h2>${t('Willkommen bei VAIs!', 'Welcome to VAIs!')}</h2>
+      <h2>${t('Willkommen bei Apex!', 'Welcome to Apex!')}</h2>
       <p class="welcome-sub">${t('Die besten KI-Modelle – kostenlos, an einem Ort.', 'The best AI models – free, in one place.')}</p>
       <label class="welcome-name"><span>${t('Wie dürfen wir dich nennen? (freiwillig)', 'What should we call you? (optional)')}</span>
         <input type="text" maxlength="40" autocomplete="given-name" enterkeyhint="done" placeholder="${t('Dein Name', 'Your name')}"></label>

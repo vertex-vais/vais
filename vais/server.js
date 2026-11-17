@@ -25,7 +25,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// Schneller Gesundheits-Check (für Render und die „VAIs wacht auf“-Seite)
+// Schneller Gesundheits-Check (für Render und die „Apex wacht auf“-Seite)
 app.get('/healthz', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true }));
 
 app.use(langMiddleware);
@@ -71,7 +71,7 @@ app.use('/api/telegram', telegramBot.router);
 // Schutz vor Anfragen fremder Webseiten (CSRF): ändernde API-Aufrufe nur von hier
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  // Herkunft prüfen: Origin, sonst Referer. Fehlt beides, kommt die Anfrage nicht aus einem Browser auf VAIs
+  // Herkunft prüfen: Origin, sonst Referer. Fehlt beides, kommt die Anfrage nicht aus einem Browser auf Apex
   // (z. B. ein Skript mit geklautem Cookie) → ablehnen. Moderne Browser schicken bei POST immer Origin.
   const source = req.headers.origin || req.headers.referer;
   let host = '';
@@ -124,7 +124,7 @@ app.get('/login', async (req, res) => {
   await sendPage(req, res, 'login.html');
 });
 
-// QR-Code (nur für Links zu VAIs selbst)
+// QR-Code (nur für Links zu Apex selbst)
 const QRCode = (await import('qrcode')).default;
 app.get('/qr', async (req, res) => {
   let url;
@@ -272,7 +272,7 @@ process.on('SIGTERM', () => {
   }, 500);
 });
 const server = app.listen(port, () => {
-  console.log(`\n  VAIs läuft auf http://localhost:${port}`);
+  console.log(`\n  Apex läuft auf http://localhost:${port}`);
   // Telegram: Webhook + Befehle automatisch setzen (nur mit Token; Fehler blockieren nichts)
   if (telegramBot.state.on && process.env.NODE_ENV !== 'test') telegramBot.start().catch(() => {});
   if (demoMode) console.log('  (Demo-Modus: kein API-Schlüssel – Platzhalter-Modelle antworten)');
