@@ -8,7 +8,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { isAdmin, isStaff, inTestMode, isUnlimited, ADMIN_EMAILS } from './config.js';
 import { notifyUser } from './push.js';
 import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } from './models.js';
-import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage, KINDS, scaled } from './limits.js';
+import { limitSettings, saveLimitSettings, LIMIT_FIELDS, costSettings, saveCostSettings, COST_FIELDS, usageMap, resetUsage, scaled } from './limits.js';
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
 import { safetyOn, setSafety } from './safety.js';
@@ -199,7 +199,7 @@ admin.post('/reports/act', wrap(async (req, res) => {
 admin.get('/users', wrap(async (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase().slice(0, 100);
   const [L, used] = await Promise.all([limitSettings(), usageMap()]);
-  const rows = await all(`SELECT u.id, u.email, u.verified, u.blocked, u.created_at, u.daily_limit, u.role,
+  const rows = await all(`SELECT u.id, u.email, u.verified, u.blocked, u.created_at, u.daily_limit, u.role, u.test_mode,
       (SELECT COUNT(*) FROM chats c WHERE c.user_id = u.id) AS chats,
       (SELECT MAX(COALESCE(c.updated_at, c.created_at)) FROM chats c WHERE c.user_id = u.id) AS last_active
     FROM users u ${q ? 'WHERE u.email LIKE ?' : ''} ORDER BY u.created_at DESC LIMIT 100`, ...(q ? [`%${q.replace(/[%_]/g, '')}%`] : []));
@@ -209,15 +209,12 @@ admin.get('/users', wrap(async (req, res) => {
       created: Number(u.created_at), chats: Number(u.chats), lastActive: u.last_active ? Number(u.last_active) : null,
       ...(() => {
         const own = u.daily_limit === null || u.daily_limit === undefined ? null : Number(u.daily_limit);
-        const unlimited = ADMIN_EMAILS.includes(u.email) || own === -1;
+        const unlimited = (ADMIN_EMAILS.includes(u.email) && Number(u.test_mode) === 1) || own === -1; // Admins nur im Testmodus
         const factor = unlimited ? null : own === null ? 1 : own / 100;
-        const counts = used.get(Number(u.id)) ?? { text: 0, web: 0, image: 0, agent: 0 };
-        const kinds = Object.fromEntries(KINDS.map((k) => {
-          const max = scaled(L[k], factor);
-          return [k, { used: counts[k] ?? 0, limit: max, percent: max === null ? 0 : max === 0 ? 100 : Math.min(100, Math.round(((counts[k] ?? 0) / max) * 100)) }];
-        }));
-        const percent = Math.max(...Object.values(kinds).map((x) => (x.limit === null ? 0 : x.percent)));
-        return { custom: own, unlimited, kinds, percent, used: Object.values(counts).reduce((a, b) => a + b, 0) };
+        const counts = used.get(Number(u.id)) ?? { credits: 0, image: 0 };
+        const limit = scaled(L.budget, factor);
+        const percent = limit === null ? 0 : limit === 0 ? 100 : Math.min(100, Math.round((counts.credits / limit) * 100));
+        return { custom: own, unlimited, credits: { used: counts.credits, limit }, images: counts.image, percent, used: counts.credits + counts.image };
       })(),
     })),
   });
@@ -247,12 +244,13 @@ admin.post('/reset-board', adminOnly, wrap(async (req, res) => {
 
 // ── Limits & Kosten ──────────────────────────────────────────────
 admin.get('/limits', wrap(async (req, res) => {
-  res.json({ limits: await limitSettings(), fields: LIMIT_FIELDS });
+  res.json({ limits: await limitSettings(), fields: LIMIT_FIELDS, costs: await costSettings(), costFields: COST_FIELDS });
 }));
 admin.post('/limits', adminOnly, wrap(async (req, res) => {
   const limits = await saveLimitSettings(req.body?.limits ?? {});
-  await logEvent('admin', null, 'Limits geändert');
-  res.json({ ok: true, limits });
+  const costs = req.body?.costs ? await saveCostSettings(req.body.costs) : await costSettings();
+  await logEvent('admin', null, 'Tagesbudget/Kosten geändert');
+  res.json({ ok: true, limits, costs });
 }));
 
 // Eigenes Limit für einen Nutzer: Zahl = Prozent vom Standard, -1 = unbegrenzt, null = Standard

@@ -9,7 +9,7 @@ import { isAdmin, isStaff, ADMIN_EMAILS } from './config.js';
 import { listModels, complete, demoMode, helperModel, rankModels } from './models.js';
 import { notifyUser } from './push.js';
 import { checkText } from './safety.js';
-import { charge, refund } from './limits.js';
+import { reserve, refund, costSettings } from './limits.js';
 
 await run(`CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY,
@@ -129,7 +129,7 @@ async function answer(g, user, text) {
     let reply;
     if (unsafe) reply = unsafe.message;
     else {
-      charged = await charge(user, 'text').catch((err) => { reply = err.message; return null; });
+      charged = await reserve(user, (await costSettings()).answer).catch((err) => { reply = err.message; return null; });
       if (!reply) {
         const history = await all(`SELECT x.user_id, x.content, u.email FROM group_messages x LEFT JOIN users u ON u.id = x.user_id
           WHERE x.group_id = ? ORDER BY x.id DESC LIMIT 24`, g.id);

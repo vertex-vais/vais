@@ -1,6 +1,6 @@
 import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
 import { markdown, enhance, linkCites, QSTATE, showQuestion, renderChart } from './render.js';
-import { startTour, tourDone } from './tour.js';
+import { startTour, tourDone, setTourPending, markTourSeen } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
 import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
@@ -91,6 +91,19 @@ const MODES = {
 let isStaffUser = false;
 // Testmodus (nur Admins/Mods, im Admin-Bereich umschaltbar): erst dann gibt es Module, Bestenliste usw. Sonst: ApeX wie für alle.
 let isTestUser = false;
+let creditsUnlimited = false; // Admin im Testmodus: keine Credits-Anzeige
+// Sanfter Hinweis, wenn das Tagesbudget fast aufgebraucht ist (pro Stufe nur einmal am Tag)
+function creditWarning(u) {
+  if (!u || u.limit === null || u.limit === undefined || u.left === null) return;
+  const low = Math.max(5, Math.round(u.limit * 0.1));
+  const level = u.left <= 0 ? 'empty' : u.left <= low ? 'low' : '';
+  if (!level) return;
+  const key = `apex-credit-warn-${new Date().toDateString()}-${level}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch { /* egal */ }
+  toast(level === 'empty'
+    ? t('Dein Tagesbudget ist aufgebraucht. Um Mitternacht gibt es neue Credits. ⚡', 'Your daily budget is used up. New credits arrive at midnight. ⚡')
+    : t(`Nur noch ${u.left} Credits für heute ⚡ Kurze Fragen kosten wenig, Bilder und Webseiten mehr.`, `Only ${u.left} credits left today ⚡ Short questions cost little, images and websites more.`));
+}
 const isAgentMode = (m) => m === 'agent' || m === 'life'; // Agentenchats verhalten sich wie ApeX
 
 const canSpeak = 'speechSynthesis' in window;
@@ -792,6 +805,14 @@ function paintLabel(card, side) {
     note.textContent = t('📌 Antwort vom ApeX-Team', '📌 Answer from the ApeX team');
     label.append(note);
   }
+  if (a?.cost && a.status !== 'streaming' && !creditsUnlimited) {
+    // Was diese Antwort vom Tagesbudget gekostet hat (dezent)
+    const note = document.createElement('span');
+    note.className = 'fallback-tag cost-tag';
+    note.title = t('So viele Credits hat diese Antwort von deinem Tagesbudget gekostet – je mehr ApeX dafür arbeiten musste, desto mehr.', 'This many credits were used from your daily budget – the more work ApeX had to do, the more.');
+    note.textContent = `⚡ ${a.cost} ${a.cost === 1 ? 'Credit' : 'Credits'}`;
+    label.append(note);
+  }
   if (a?.cached && chat.mode !== 'battle') {
     const note = document.createElement('span');
     note.className = 'fallback-tag';
@@ -1167,6 +1188,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
         if (msg.cached) { a.cached = true; scheduleUpdate(turnIndex, side); }
         if (msg.faq) { a.faq = true; scheduleUpdate(turnIndex, side); }
         if (msg.summarized) { a.summarized = msg.summarized; scheduleUpdate(turnIndex, side); }
+        if (msg.usage) { a.cost = msg.usage.cost || 0; creditsUnlimited = msg.usage.limit === null; creditWarning(msg.usage); }
         if (msg.done) finished = true;
       }
     }
@@ -3490,30 +3512,32 @@ $('#share-stop').addEventListener('click', async () => {
 $('#share-link').addEventListener('focus', (e) => e.target.select());
 
 // ── Meine Statistik ───────────────────────────────────────────────
-// Tagesverbrauch: je Art ein Balken von 0 bis 100 % (Antworten, Websuchen, Bilder, ApeX)
+// Tagesbudget: ein Balken mit den Credits, die heute noch übrig sind
 function renderUsage(u) {
   const box = $('#usage-card');
-  if (!u?.kinds) { box.hidden = true; return; }
-  const NAMES = { text: [t('Antworten', 'Answers'), '💬'], web: [t('Websuchen', 'Web searches'), '🌐'], image: [t('Bilder', 'Images'), '🎨'], agent: ['ApeX', '🤖'] };
+  if (!u?.credits) { box.hidden = true; return; }
+  creditsUnlimited = !!u.unlimited;
+  const c = u.credits;
+  const k = u.costs ?? {};
+  const prices = [
+    [t('Kurze Antwort', 'Short answer'), k.answer],
+    [t('mit Websuche', 'with web search'), (k.answer ?? 0) + (k.web ?? 0)],
+    [t('Bild', 'Image'), (k.answer ?? 0) + (k.image ?? 0)],
+    [t('Webseite', 'Website'), t(`ab ${(k.answer ?? 0) + (k.site ?? 0)}`, `from ${(k.answer ?? 0) + (k.site ?? 0)}`)],
+  ].filter(([, v]) => v !== undefined).map(([name, v]) => `${name} ${v}`).join(' · ');
   if (u.unlimited) {
-    const total = Object.values(u.kinds).reduce((a, k) => a + k.used, 0);
-    box.innerHTML = `<div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>∞</b></div>
-      <p class="usage-sub">${t(`Du hast kein Tageslimit. Heute ${total} Antworten.`, `You have no daily limit. ${total} answers today.`)}</p>`;
+    box.innerHTML = `<div class="usage-top"><span>${t('Credits heute', 'Credits today')}</span><b>∞</b></div>
+      <p class="usage-sub">${t(`Du hast kein Tagesbudget. Heute ${c.used} Credits genutzt.`, `You have no daily budget. ${c.used} credits used today.`)}</p>`;
   } else {
-    const level = u.percent >= 100 ? 'full' : u.percent >= 80 ? 'high' : '';
-    const rows = Object.entries(u.kinds).map(([k, v]) => {
-      const lv = v.percent >= 100 ? 'full' : v.percent >= 80 ? 'high' : '';
-      return `<div class="usage-row">
-        <div class="usage-row-top"><span>${NAMES[k][1]} ${NAMES[k][0]}</span><span><b>${v.used}</b> / ${v.limit} · ${v.percent} %</span></div>
-        <div class="usage-bar ${lv}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.percent}" aria-label="${NAMES[k][0]}"><i style="width:${v.percent}%"></i></div>
-      </div>`;
-    }).join('');
-    const note = level === 'full' ? t('Etwas ist voll – um Mitternacht geht es weiter.', 'Something is full – resets at midnight.')
-      : t('Alles wieder auf 0 um Mitternacht', 'Everything back to 0 at midnight');
+    const level = c.percent >= 100 ? 'full' : c.percent >= 90 ? 'high' : '';
+    const note = level === 'full' ? t('Aufgebraucht – um Mitternacht gibt es neue Credits.', 'Used up – new credits at midnight.')
+      : level === 'high' ? t('Fast aufgebraucht – um Mitternacht gibt es neue.', 'Almost used up – new ones at midnight.')
+        : t('Neue Credits jeden Tag um Mitternacht', 'New credits every day at midnight');
     box.innerHTML = `
-      <div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span></div>
-      <div class="usage-rows">${rows}</div>
-      <p class="usage-sub"><span class="usage-note ${level}">${note}</span>${isTestUser ? `<span>${t('Ein Battle zählt als 2 Antworten.', 'A battle counts as 2 answers.')}</span>` : ''}</p>`;
+      <div class="usage-top"><span>${t('Credits heute übrig', 'Credits left today')}</span><b>${c.left}</b></div>
+      <div class="usage-bar ${level}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${100 - c.percent}" aria-label="${t('Credits übrig', 'Credits left')}"><i style="width:${100 - c.percent}%"></i></div>
+      <p class="usage-sub"><span class="usage-note ${level}">${note}</span><span>${t(`${c.used} von ${c.limit} genutzt`, `${c.used} of ${c.limit} used`)}</span></p>
+      <p class="usage-sub usage-prices">${t('Je mehr ApeX arbeitet, desto mehr kostet es:', 'The more work ApeX does, the more it costs:')} ${prices}</p>`;
   }
   box.hidden = false;
 }
@@ -4045,6 +4069,8 @@ async function init() {
   }
   // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
   // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
+  creditsUnlimited = user.unlimited === true;
+  setTourPending(user.tour === true); // Tour nur, wenn der Server sagt: neues Konto, noch nie gesehen
   if (user.admin === true || user.mod === true) {
     isStaffUser = true;
     isTestUser = user.testMode === true; // Testmodus aus → ApeX genau wie für normale Nutzer
@@ -4141,7 +4167,7 @@ function showWelcome() {
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } });
   box.querySelector('.welcome-go').addEventListener('click', () => close());
   box.querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => {
-    if (!tourDone()) try { localStorage.setItem('vais_tour_done', '2'); } catch { /* egal */ }
+    markTourSeen(); // Idee gewählt → Tour überspringen, nie wieder zeigen
     close(ideas[Number(b.dataset.idea)][1]);
   }));
 }

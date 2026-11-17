@@ -16,7 +16,7 @@ import { searchWeb, resultsPrompt } from './search.js';
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
 import { checkText } from './safety.js';
-import { limitSettings, charge, refund, usageOf, usageHistory } from './limits.js';
+import { limitSettings, costSettings, reserve, settle, refund, countImages, budgetOf, workCost, usageOf, usageHistory } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { getActiveProviderKey, noteProviderKeyFailure } from './providerKeys.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -372,26 +372,34 @@ chat.post('/stream', wrap(async (req, res) => {
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   const L = await limitSettings();
   limit(req.user, L.burst);
-  // Tageslimit: zählt je nach Art der Antwort (Antwort, Websuche, Bild, ApeX)
+  // Tagesbudget (Credits): vorab nur der Mindestpreis, abgerechnet wird am Ende nach der wirklichen Arbeit
   const info = model === 'agent' ? null : await findModel(model);
-  const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, zählt nicht
+  const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, kostet nichts
+  const imageTurn = model !== 'agent' && row.modality === 'image';
   const kind = quick ? null : model === 'agent' ? 'agent'
-    : row.modality === 'image' ? 'image'
+    : imageTurn ? 'image'
       : row.modality === 'web' || webAsk || info?.caps.includes('web') ? 'web'
         : 'text';
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
   const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
-  // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, zählt nicht
+  // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, kostet nichts
   const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
-  if (!blocked && !faq && kind && !inTestMode(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
-  // „Denken“: gründlicher nachdenken lassen – zählt als 2 Antworten (nicht bei ApeX und Bildern)
+  if (!blocked && !faq && kind && !inTestMode(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
+  // „Denken“: gründlicher nachdenken lassen – kostet den Zuschlag für lange Antworten (nicht bei ApeX und Bildern)
   const think = !!req.body?.think && (kind === 'text' || kind === 'web');
-  const cost = think ? 2 : 1;
-  let charged;
-  try { charged = blocked || faq ? null : await charge(req.user, kind, cost); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
-  const giveBack = async () => { await refund(req.user, charged, cost); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
+  const costs = await costSettings();
+  const work = { think }; // was wirklich passiert ist → Kosten
+  const minCost = imageTurn ? costs.answer + costs.image : costs.answer;
+  let reserved = 0;
+  let charged = false;
+  try {
+    if (!blocked && !faq && kind) { reserved = await reserve(req.user, minCost, { images: imageTurn ? 1 : 0 }); charged = true; }
+  } catch (err) { if (kind) undoIpAnswer(req.ip, 'answer'); throw err; }
+  const giveBack = async () => { if (!charged) return; charged = false; await refund(req.user, reserved); undoIpAnswer(req.ip, 'answer'); }; // nichts geantwortet → kostet nichts
+  const budget = charged ? await budgetOf(req.user) : null;
+  let cost = 0; // am Ende abgerechnete Credits
   const personal = await personalFor(req.user.id);
   // Agentenchats (Beta): nutzen das Gedächtnis auch, wenn es sonst aus ist
   if (row.mode === 'life' && !personal.memoryOn && !row.incognito) {
@@ -426,8 +434,8 @@ chat.post('/stream', wrap(async (req, res) => {
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached || faqHit)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto: faqHit ? undefined : auto, cached: cached || undefined, faq: faqHit || undefined }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached || faqHit || cost)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto: faqHit ? undefined : auto, cached: cached || undefined, faq: faqHit || undefined, cost: cost || undefined }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -535,6 +543,8 @@ chat.post('/stream', wrap(async (req, res) => {
           onRemember: (fact) => remember(req.user.id, fact, { force: row.mode === 'life' && !row.incognito }),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
+          work,
+          credits: budget ? { left: budget.left, imagesLeft: budget.imagesLeft, costs } : null,
         });
       }
     } else {
@@ -545,6 +555,7 @@ chat.post('/stream', wrap(async (req, res) => {
         const query = await searchQuery(clean, typeof display?.text === 'string' ? display.text : plain(clean.at(-1)), controller.signal);
         out(`${JSON.stringify({ searching: query })}\n`);
         const found = await searchWeb(query, { signal: controller.signal, max: 6 }).catch(() => null);
+        work.searches = (work.searches ?? 0) + 1;
         if (found?.results.length) {
           webResults = { query, results: found.results };
           onSources(found.results.map(({ url, title }) => ({ url, title })));
@@ -573,6 +584,7 @@ chat.post('/stream', wrap(async (req, res) => {
             if (img) { images.push(img); out(`${JSON.stringify({ image: img })}\n`); }
             break;
           }
+          work.calls = (work.calls ?? 0) + 1;
           await streamChat({
             model,
             messages: withSystem([
@@ -623,13 +635,25 @@ chat.post('/stream', wrap(async (req, res) => {
     }
     // Emoji-Reaktion nur, wenn sie die ganze Antwort ist – mit Text keine Reaktion
     if (reaction && text.trim()) { reaction = null; out(`${JSON.stringify({ react: '' })}\n`); }
-    out(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length || reaction;
     if (!got) await giveBack();
+    else if (charged) {
+      // Abrechnen nach dem, was wirklich gemacht wurde (Suchen, Bilder, Webseiten, Schritte …)
+      cost = await settle(req.user, reserved, workCost({ ...work, answered: !!text.trim(), chars: text.length, reasoning: thinking.length > 4000, images: images.length }, costs));
+      if (images.length) await countImages(req.user, images.length);
+      const now = await budgetOf(req.user);
+      out(`${JSON.stringify({ usage: { cost, left: now.left, limit: now.limit } })}\n`);
+    }
+    out(`${JSON.stringify({ done: true })}\n`);
     if (cacheKey && text && !fallback && !/stehen geblieben|stopped here/.test(text.slice(-160))) storeAnswer(cacheKey, model, text);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
-    if (!text && !images.length && !reaction) await giveBack(); // keine Antwort → Punkte zurück
+    if (!text && !images.length && !reaction) await giveBack(); // keine Antwort → kostet nichts
+    else if (charged) {
+      // abgebrochen oder Fehler mitten drin: nur das Geleistete zählt
+      cost = await settle(req.user, reserved, workCost({ ...work, answered: !!text.trim(), chars: text.length, images: images.length }, costs)).catch(() => reserved);
+      if (images.length) await countImages(req.user, images.length);
+    }
     if (controller.signal.aborted) {
       await save(side === 1 ? 1 : 0, text, text || images.length ? 'done' : 'stopped');
     } else {
@@ -997,8 +1021,8 @@ chat.post('/translate', wrap(async (req, res) => {
   limit(req.user, L.burst);
   const unsafe = await checkText(text, 'prompt');
   if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
-  if (!inTestMode(req.user)) ipAnswerQuota(req.ip, 'text', L.text);
-  const charged = await charge(req.user, 'text');
+  if (!inTestMode(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
+  const charged = await reserve(req.user, (await costSettings()).answer); // eine einfache Antwort
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
     const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
@@ -1141,7 +1165,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, thinkSummary: forShare ? null : meta.thinkSummary ?? null,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
-        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq,
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq, cost: Number(meta.cost) || 0,
       };
     }
   }

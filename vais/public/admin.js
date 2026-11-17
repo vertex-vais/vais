@@ -341,9 +341,9 @@ async function loadUsers() {
   try {
     const { users } = await api(`users?q=${encodeURIComponent($('#user-q').value.trim())}`);
     $('#users').innerHTML = users.length ? users.map((u) => {
-      const K = { text: t('Antw.', 'Answ.'), web: t('Web', 'Web'), image: t('Bilder', 'Images'), agent: 'Agent' };
-      const limitText = u.unlimited ? t('unbegrenzt', 'unlimited')
-        : `${Object.entries(u.kinds).map(([k, v]) => `${K[k]} ${num(v.used)}/${num(v.limit)}`).join(' · ')}${u.custom !== null && u.custom !== -1 ? ` (${num(u.custom)} %)` : ''}`;
+      const pics = u.images ? ` · ${num(u.images)} ${t('Bilder', 'images')}` : '';
+      const limitText = u.unlimited ? `${t('unbegrenzt', 'unlimited')} · ${num(u.credits.used)} Credits${pics}`
+        : `${num(u.credits.used)} / ${num(u.credits.limit)} Credits${pics}${u.custom !== null && u.custom !== -1 ? ` (${num(u.custom)} %)` : ''}`;
       return `
       <li class="${u.blocked ? 'blocked' : ''}" data-user="${u.id}">
         <div class="adm-user-row">
@@ -423,39 +423,64 @@ function openLimitEditor(btn) {
   li.append(box);
 }
 
-// ── Tageslimit & Kosten ──────────────────────────────────────────
+// ── Tagesbudget & Kosten ─────────────────────────────────────────
 const LIMIT_LABELS = {
-  text: [t('Antworten pro Tag', 'Answers per day'), t('normale Antworten, Übersetzer – ein Battle zählt 2', 'normal answers, translator – a battle counts 2')],
-  web: [t('Websuchen pro Tag', 'Web searches per day'), t('Antworten mit Internet-Suche', 'answers with internet search')],
-  image: [t('Bilder pro Tag', 'Images per day'), t('erstellte oder bearbeitete Bilder', 'created or edited images')],
-  agent: [t('ApeX pro Tag', 'ApeX per day'), t('Aufträge (Webseiten, Recherchen …)', 'tasks (websites, research …)')],
-  paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten von Premium-Modellen', 'answers from premium models')],
-  burst: [t('Schutz vor Spam', 'Spam protection'), t('Antworten in 5 Minuten', 'answers in 5 minutes')],
+  budget: [t('Credits pro Tag', 'Credits per day'), t('Tagesbudget jedes Nutzers – neu um Mitternacht', 'every user’s daily budget – resets at midnight')],
+  image: [t('Bilder höchstens pro Tag', 'Max images per day'), t('Sicherheits-Grenze, auch wenn noch Credits übrig sind', 'safety cap, even with credits left')],
+  paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten von Premium-Modellen (nur Testmodus)', 'answers from premium models (test mode only)')],
+  burst: [t('Schutz vor Spam', 'Spam protection'), t('Anfragen in 5 Minuten', 'requests in 5 minutes')],
   maxChats: [t('Chats pro Person', 'Chats per person'), t('gespeichert, 0 = unbegrenzt', 'saved, 0 = unlimited')],
 };
+const COST_LABELS = {
+  answer: [t('Antwort (Grundpreis)', 'Answer (base price)'), t('jede Antwort von ApeX', 'every ApeX answer')],
+  long: [t('+ Lange Antwort', '+ Long answer'), t('sehr lang, gründlich durchdacht oder mehrere Durchgänge', 'very long, thought through or several passes')],
+  web: [t('+ Websuche', '+ Web search'), t('ApeX sucht im Internet', 'ApeX searches the web')],
+  webMore: [t('+ je weitere Quelle', '+ per extra source'), t('jede weitere Suche oder gelesene Seite', 'each further search or page read')],
+  deep: [t('+ Tiefe Recherche', '+ Deep research'), t('viele Quellen werden gelesen und verglichen', 'many sources read and compared')],
+  heavy: [t('+ Schwere Aufgabe', '+ Hard task'), t('mehrere Durchgänge, die sich gegenseitig prüfen', 'several passes checking each other')],
+  image: [t('+ je Bild', '+ per image'), t('erstellt oder bearbeitet', 'created or edited')],
+  site: [t('+ Webseite / App bauen', '+ Build website / app'), t('in vielen Schritten gebaut und geprüft', 'built and checked in many steps')],
+  siteEdit: [t('+ Webseite ändern', '+ Edit website'), t('je Änderung', 'per change')],
+  step: [t('+ je weiterer Arbeitsschritt', '+ per extra work step'), t('ab dem 4. Schritt eines Auftrags', 'from the 4th step of a task')],
+  max: [t('Höchstens pro Auftrag', 'Max per task'), t('teurer wird eine einzelne Antwort nie', 'a single answer never costs more')],
+};
 let limitsCache = null;
+const fieldHtml = (labels, fields, values, group) => Object.keys(fields).map((k) => `
+      <label class="adm-field"><span><b>${esc(labels[k]?.[0] ?? k)}</b><small>${esc(labels[k]?.[1] ?? '')}</small></span>
+        <input class="adm-input small" type="number" data-group="${group}" name="${k}" min="${fields[k].min}" max="${fields[k].max}" inputmode="numeric" value="${values[k]}"></label>`).join('');
+const formValues = (group) => Object.fromEntries([...document.querySelectorAll(`#limits-form input[data-group="${group}"]`)].map((i) => [i.name, Number(i.value) || 0]));
 function limitExample() {
-  const f = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value) || 0]));
+  const f = formValues('limits');
+  const c = formValues('costs');
+  const cap = (n) => Math.min(n, c.max || n);
+  const simple = cap(c.answer);
+  const search = cap(c.answer + c.web);
+  const picture = cap(c.answer + c.image);
+  const site = cap(c.answer + c.long + c.site + c.step * 3);
+  const per = (n) => (n ? num(Math.floor(f.budget / n)) : '∞');
   $('#limit-example').textContent = t(
-    `Jeder bekommt pro Tag ${num(f.text)} Antworten (= ${num(Math.floor(f.text / 2))} Battles), ${num(f.web)} Websuchen, ${num(f.image)} Bilder und ${num(f.agent)} ApeX-Aufträge. Jede Art hat ihren eigenen Zähler.`,
-    `Everyone gets ${num(f.text)} answers (= ${num(Math.floor(f.text / 2))} battles), ${num(f.web)} web searches, ${num(f.image)} images and ${num(f.agent)} ApeX tasks per day. Each type has its own counter.`,
+    `Beispiel mit ${num(f.budget)} Credits am Tag: ${per(simple)} einfache Antworten (${num(simple)}) oder ${per(search)} mit Websuche (${num(search)}) oder ${per(picture)} Bilder (${num(picture)}) oder etwa ${per(site)} Webseiten (ca. ${num(site)}). Abgerechnet wird erst am Ende – nach dem, was ApeX wirklich gemacht hat. Ohne Antwort kostet es nichts.`,
+    `Example with ${num(f.budget)} credits per day: ${per(simple)} simple answers (${num(simple)}) or ${per(search)} with web search (${num(search)}) or ${per(picture)} images (${num(picture)}) or about ${per(site)} websites (approx. ${num(site)}). Charged only at the end – for what ApeX actually did. No answer costs nothing.`,
   );
 }
 async function loadLimits() {
   try {
-    const { limits, fields } = await api('limits');
+    const { limits, fields, costs, costFields } = await api('limits');
     limitsCache = limits;
-    $('#limit-fields').innerHTML = Object.keys(fields).map((k) => `
-      <label class="adm-field"><span><b>${esc(LIMIT_LABELS[k]?.[0] ?? k)}</b><small>${esc(LIMIT_LABELS[k]?.[1] ?? '')}</small></span>
-        <input class="adm-input small" type="number" name="${k}" min="${fields[k].min}" max="${fields[k].max}" inputmode="numeric" value="${limits[k]}"></label>`).join('');
+    $('#limit-fields').innerHTML = fieldHtml(LIMIT_LABELS, fields, limits, 'limits');
+    $('#cost-fields').innerHTML = fieldHtml(COST_LABELS, costFields, costs, 'costs');
     limitExample();
   } catch (err) { toast(err.message); }
 }
-$('#limit-fields').addEventListener('input', limitExample);
+$('#limits-form').addEventListener('input', limitExample);
 $('#limits-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const limits = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value)]));
-  try { limitsCache = (await api('limits', { limits })).limits; toast(t('Gespeichert.', 'Saved.')); loadUsers(); } catch (err) { toast(err.message); }
+  try {
+    const out = await api('limits', { limits: formValues('limits'), costs: formValues('costs') });
+    limitsCache = out.limits;
+    toast(t('Gespeichert.', 'Saved.'));
+    loadUsers();
+  } catch (err) { toast(err.message); }
 });
 
 // ── API-Schlüssel ────────────────────────────────────────────────
