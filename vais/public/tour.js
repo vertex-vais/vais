@@ -2,16 +2,17 @@
 import { t } from './i18n.js';
 
 const KEY = 'vais_tour_done';
+// Neue Tour (ApeX = eine KI): wer die alte gesehen hat, bekommt sie einmal neu
+const VERSION = '2';
 const STEPS = () => [
-  { title: t('Willkommen bei ApeX 👋', 'Welcome to ApeX 👋'), text: t('Hier nutzt du die besten KI-Modelle kostenlos – und vergleichst sie miteinander. Eine kurze Tour?', 'Use the best AI models for free – and compare them. A quick tour?') },
-  { target: '#mode-btn', title: t('Modus', 'Mode'), text: t('Agent X erledigt Aufgaben selbstständig. Im Battle antworten zwei geheime Modelle und du stimmst ab. Oder nutze zwei Modelle nebeneinander bzw. eins direkt.', 'Agent X does tasks on its own. In Battle two hidden models answer and you vote. Or use two models side by side, or one directly.') },
-  { target: '#modality-btn', title: t('Was soll entstehen?', 'What do you want?'), text: t('Text, Code und Webseiten, Websuche mit Quellen oder Bilder.', 'Text, code and websites, web search with sources, or images.') },
-  { target: '.composer', title: t('Frag irgendwas', 'Ask anything'), text: t('Mit + hängst du Bilder und PDFs an, mit dem Mikrofon sprichst du deine Frage.', 'Use + to attach images and PDFs, or tap the microphone to speak.') },
-  { target: '#open-drawer', title: t('Verlauf & Bestenliste', 'History & leaderboard'), text: t('Hier findest du deine Chats, die Bestenliste der Modelle, deine Statistik und die Einstellungen.', 'Here you find your chats, the model leaderboard, your stats and settings.') },
+  { title: t('Willkommen bei ApeX 👋', 'Welcome to ApeX 👋'), text: t('ApeX ist deine KI von VERTEX – kostenlos. Eine kurze Tour?', 'ApeX is your AI by VERTEX – for free. A quick tour?') },
+  { target: '.composer', title: t('Frag einfach', 'Just ask'), text: t('Schreib, was du brauchst. ApeX recherchiert im Web, schreibt Texte, malt Bilder, programmiert und baut Webseiten – ganz von selbst.', 'Write what you need. ApeX searches the web, writes, draws images, codes and builds websites – all on its own.') },
+  { target: '#attach-btn', title: t('Bilder & Dateien', 'Images & files'), text: t('Mit + hängst du Fotos, Bilder und PDFs an. ApeX schaut sie sich an.', 'Use + to attach photos, images and PDFs. ApeX takes a look.') },
+  { target: '#open-drawer', title: t('Deine Chats', 'Your chats'), text: t('Hier findest du deine Chats, deine Statistik und die Einstellungen.', 'Here you find your chats, your stats and settings.') },
 ];
 
 export function tourDone() {
-  try { return !!localStorage.getItem(KEY); } catch { return true; }
+  try { return localStorage.getItem(KEY) === VERSION; } catch { return true; }
 }
 
 export function startTour() {
@@ -82,7 +83,7 @@ export function startTour() {
   }
 
   function end() {
-    try { localStorage.setItem(KEY, '1'); } catch { /* egal */ }
+    try { localStorage.setItem(KEY, VERSION); } catch { /* egal */ }
     window.removeEventListener('resize', place);
     document.removeEventListener('keydown', onKey, true);
     root.classList.add('out');

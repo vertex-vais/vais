@@ -1,4 +1,4 @@
-// Tageslimit pro Nutzer: jeder bekommt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und Agent-X-Aufträge.
+// Tageslimit pro Nutzer: jeder bekommt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und ApeX-Aufträge.
 // So bleibt für alle genug übrig. Alles im Admin-Bereich einstellbar.
 import { get, run, all, getSetting, setSetting } from './db.js';
 import { t } from './i18n.js';
@@ -10,14 +10,14 @@ export const LIMIT_FIELDS = {
   text: { min: 0, max: 100000, def: Number(process.env.USER_DAILY_ANSWERS) || 100 }, // normale Antworten (Text/Code, Übersetzer, Team-KI)
   web: { min: 0, max: 100000, def: 30 }, // Antworten mit Websuche
   image: { min: 0, max: 100000, def: 20 }, // Bilder
-  agent: { min: 0, max: 100000, def: 15 }, // Agent-X-Aufträge
+  agent: { min: 0, max: 100000, def: 15 }, // ApeX-Aufträge
   paidDaily: { min: 0, max: 10000, def: Number(process.env.PAID_DAILY_LIMIT ?? 20) }, // Premium-Antworten pro Tag
   burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Antworten in 5 Minuten
   maxChats: { min: 0, max: 1000, def: 10 }, // so viele gespeicherte Chats pro Person (0 = unbegrenzt)
 };
 export const KINDS = ['text', 'web', 'image', 'agent'];
 const KIND_NAME = {
-  text: () => t('Antworten', 'answers'), web: () => t('Websuchen', 'web searches'), image: () => t('Bilder', 'images'), agent: () => t('Agent-X-Aufträge', 'Agent X tasks'),
+  text: () => t('Antworten', 'answers'), web: () => t('Websuchen', 'web searches'), image: () => t('Bilder', 'images'), agent: () => t('ApeX-Aufträge', 'ApeX tasks'),
 };
 
 let cached = null;

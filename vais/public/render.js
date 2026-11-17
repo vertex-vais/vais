@@ -130,7 +130,7 @@ export function enhance(root) {
     if (pre.parentElement?.classList.contains('codeblock')) return;
     const lang = (code.className.match(/language-([\w+#.-]+)/) || [])[1] || '';
     if (lang === 'plan') {
-      // Plan von Agent X: Schritte als Karte, darunter „Los geht’s“ / „Ändern“
+      // Plan von ApeX: Schritte als Karte, darunter „Los geht’s“ / „Ändern“
       const steps = code.textContent.split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-*•])\s*/, '').trim()).filter(Boolean).slice(0, 12);
       const card = document.createElement('div');
       card.className = 'plan-card';
@@ -147,7 +147,7 @@ export function enhance(root) {
       return;
     }
     if (lang === 'questions') {
-      // Rückfragen von Agent X: eine Frage nach der anderen, Antworten zum Antippen + eigenes Feld
+      // Rückfragen von ApeX: eine Frage nach der anderen, Antworten zum Antippen + eigenes Feld
       const src = code.textContent;
       const qs = src.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).map((line) => {
         const [q, ...opts] = line.split('|').map((x) => x.trim());

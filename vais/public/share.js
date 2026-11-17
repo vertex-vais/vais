@@ -5,7 +5,7 @@ import { markdown, enhance } from './render.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
 
-const MODE = { agent: 'Agent X', battle: 'Battle', sxs: 'Side by Side', direct: t('Direkt', 'Direct') };
+const MODE = { agent: 'ApeX', battle: 'Battle', sxs: 'Side by Side', direct: t('Direkt', 'Direct') };
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -15,7 +15,7 @@ function el(tag, cls, text) {
 }
 
 function label(chat, side) {
-  if (chat.mode === 'agent') return 'Agent X';
+  if (chat.mode === 'agent') return 'ApeX';
   if (chat.labels?.[side]) return chat.labels[side];
   return `${t('Assistent', 'Assistant')} ${'AB'[side]}`;
 }
@@ -94,7 +94,7 @@ async function init() {
     if (!res.ok) throw new Error(data.error || t('Dieser Link ist nicht (mehr) gültig.', 'This link is not valid (anymore).'));
     document.title = `${data.title} – ApeX`;
     $('#share-title').textContent = data.title;
-    const models = data.labels?.length ? ` · ${data.labels.join(' vs. ')}` : '';
+    const models = data.mode !== 'agent' && data.labels?.length ? ` · ${data.labels.join(' vs. ')}` : '';
     $('#share-meta').textContent = `${MODE[data.mode] ?? data.mode}${models}`;
     for (const turn of data.turns) $('#thread').append(renderTurn(data, turn));
     $('#share-end').hidden = false;
