@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vais
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vais/package-lock.json
+      - run: npm ci
+      - name: Syntax aller Dateien prüfen
+        run: for f in server.js src/*.js public/*.js; do node --check "$f" || exit 1; done
+      - name: Text-Liste für Übersetzungen aktuell?
+        run: node scripts/extract-strings.mjs && git diff --exit-code public/i18n/strings.json
+      - run: npm test

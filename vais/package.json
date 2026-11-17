@@ -1,0 +1,32 @@
+{
+  "name": "vais",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VAIs – KI-Modelle kostenlos nutzen und vergleichen",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node --max-old-space-size=384 --expose-gc server.js",
+    "dev": "node --watch server.js",
+    "strings": "node scripts/extract-strings.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "@fontsource/instrument-serif": "^5.2.5",
+    "@fontsource/inter": "^5.2.5",
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@highlightjs/cdn-assets": "^11.11.1",
+    "@libsql/client": "^0.18.0",
+    "dompurify": "^3.2.4",
+    "express": "^5.1.0",
+    "katex": "^0.19.1",
+    "marked": "^15.0.12",
+    "nodemailer": "^10.3.1",
+    "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
+    "web-push": "^3.6.7"
+  }
+}
