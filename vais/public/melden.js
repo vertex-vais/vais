@@ -1,4 +1,4 @@
-// Melden-Seite: Webseite (?site=ID) oder geteilten Chat (?chat=ID) an das VAIs-Team melden
+// Melden-Seite: Webseite (?site=ID) oder geteilten Chat (?chat=ID) an das ApeX-Team melden
 import { t, translateDom } from './i18n.js';
 
 translateDom?.(document);

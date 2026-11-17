@@ -1,4 +1,4 @@
-# Render-Blueprint für VAIs: render.com → New → Blueprint → dieses Repo wählen.
+# Render-Blueprint für Apex: render.com → New → Blueprint → dieses Repo wählen.
 # Werte mit "sync: false" fragt Render beim Einrichten ab.
 services:
   - type: web
@@ -23,6 +23,13 @@ services:
       - key: SMTP_PASS
         sync: false
       - key: MAIL_FROM
+        sync: false
+      # Anzeigename in Mails ist Apex. Beispiel: Apex <deine-adresse@gmail.com>
+      # Cursor-Keys aus dem Admin (AES-256-GCM). Langer Zufallswert, vor dem ersten Key setzen.
+      - key: KEY_ENCRYPTION_SECRET
+        sync: false
+      # Optionaler Ersatz, wenn im Admin kein aktiver Cursor-Key frei ist
+      - key: CURSOR_API_KEY
         sync: false
       # KI-Modelle über OpenRouter (kostenlose Modelle). Leer = Demo-Modus
       - key: OPENROUTER_API_KEY

@@ -29,5 +29,5 @@ body.status-page { margin: 0; background: var(--bg); color: var(--text); font-fa
 .st-dot.down { background: var(--danger); }
 .st-foot { color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 18px; }
 .st-foot a { color: inherit; }
-.st-mark { width: 44px; height: 22px; background: currentColor; -webkit-mask: url(/icons/vais.svg) center / contain no-repeat; mask: url(/icons/vais.svg) center / contain no-repeat; }
+.st-mark { width: 22px; height: 22px; background: currentColor; -webkit-mask: url(/icons/apex-mark.png) center / contain no-repeat; mask: url(/icons/apex-mark.png) center / contain no-repeat; }
 .st-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; }

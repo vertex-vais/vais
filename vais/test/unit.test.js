@@ -97,10 +97,10 @@ test('Such-Budget: wenig bei Plänen/Tipps, mehr bei ausdrücklicher Recherche',
 
 test('Eigene Antworten: gleiche oder fast gleiche Fragen erkennen', async () => {
   const { matches } = await import('../src/faq.js');
-  assert.ok(matches('wer hat vais gemacht', 'Wer hat VAIs gemacht?'));
-  assert.ok(matches('Kannst du mir sagen wer VAIs gemacht hat', 'Wer hat VAIs gemacht?'));
+  assert.ok(matches('wer hat apex gemacht', 'Wer hat ApeX gemacht?'));
+  assert.ok(matches('Kannst du mir sagen wer ApeX gemacht hat', 'Wer hat ApeX gemacht?'));
   assert.ok(matches('Wie kann ich mein Passwrot ändern', 'Wie kann ich mein Passwort ändern?'));
   assert.ok(matches('Wie kann ich mein Passwort zurücksetzen', 'Wie kann ich mein Passwort ändern?'));
   assert.ok(!matches('Was ist ein Wal', 'Was ist ein Hund?'));
-  assert.ok(!matches('Was kostet Netflix', 'Was kostet VAIs?'));
+  assert.ok(!matches('Was kostet Netflix', 'Was kostet ApeX?'));
 });

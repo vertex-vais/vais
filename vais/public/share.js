@@ -92,7 +92,7 @@ async function init() {
     const res = await fetch(`/api/share/${encodeURIComponent(id)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t('Dieser Link ist nicht (mehr) gültig.', 'This link is not valid (anymore).'));
-    document.title = `${data.title} – VAIs`;
+    document.title = `${data.title} – ApeX`;
     $('#share-title').textContent = data.title;
     const models = data.labels?.length ? ` · ${data.labels.join(' vs. ')}` : '';
     $('#share-meta').textContent = `${MODE[data.mode] ?? data.mode}${models}`;

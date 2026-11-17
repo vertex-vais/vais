@@ -17,6 +17,7 @@ import { maintenance, forgetMaintenance } from './maintenance.js';
 import { listReports, actOnReport, openReportCount } from './reports.js';
 import { memory, healthList, runHealthCheck } from './stability.js';
 import { faqList, faqSave, faqRemove, topQuestions } from './faq.js';
+import { listProviderKeysPublic, listCursorKeysPublic, addProviderKey, addCursorKey, setProviderKeyEnabled, removeProviderKey, testProviderKey } from './providerKeys.js';
 
 export const admin = Router();
 
@@ -283,6 +284,46 @@ admin.post('/keys/remove', adminOnly, wrap(async (req, res) => {
   res.json({ ok: true, providers: keyStatus() });
 }));
 
+// ── API-Keys aller Anbieter (verschlüsselt, nie im Klartext zurück) ─
+const providerList = (cursorOnly) => cursorOnly ? listCursorKeysPublic() : listProviderKeysPublic();
+admin.get(['/provider-keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
+  res.json(await providerList(req.path.endsWith('/cursor-keys')));
+}));
+admin.post(['/provider-keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
+  const cursorOnly = req.path.endsWith('/cursor-keys');
+  let row;
+  try {
+    row = cursorOnly
+      ? await addCursorKey(req.body?.label, req.body?.key)
+      : await addProviderKey({ provider: req.body?.provider, label: req.body?.label, key: req.body?.key, baseUrl: req.body?.baseUrl, model: req.body?.model });
+  } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  await logEvent('admin', null, `API-Key hinzugefügt: ${row.provider ?? 'cursor'} ${row.label} ${row.masked}`);
+  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+}));
+admin.post(['/provider-keys/toggle', '/cursor-keys/toggle'], adminOnly, wrap(async (req, res) => {
+  const cursorOnly = req.path.includes('/cursor-keys/');
+  try { await setProviderKeyEnabled(req.body?.id, req.body?.enabled); }
+  catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+}));
+admin.post(['/provider-keys/remove', '/cursor-keys/remove'], adminOnly, wrap(async (req, res) => {
+  const cursorOnly = req.path.includes('/cursor-keys/');
+  let row;
+  try { row = await removeProviderKey(req.body?.id); }
+  catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  await logEvent('admin', null, `API-Key entfernt: ${row.provider} ${row.label} ${row.masked}`);
+  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+}));
+admin.post(['/provider-keys/test', '/cursor-keys/test'], adminOnly, wrap(async (req, res) => {
+  const cursorOnly = req.path.includes('/cursor-keys/');
+  try {
+    const result = await testProviderKey(req.body?.id);
+    res.json({ ...result, ...(await providerList(cursorOnly)) });
+  } catch (err) {
+    throw new HttpError(err.status ?? 400, err.message);
+  }
+}));
+
 admin.get('/sites', wrap(async (req, res) => {
   res.json({ sites: (await listAllSites()).map((s) => ({ id: s.id, title: s.title, views: Number(s.views), created: Number(s.created_at), email: s.email })) });
 }));
@@ -298,7 +339,7 @@ admin.post('/alarms', adminOnly, wrap(async (req, res) => {
   res.json({ ok: true, on: !!req.body?.on });
 }));
 admin.post('/alarms/test', adminOnly, wrap(async (req, res) => {
-  await alarm(`test-${Date.now()}`, 'Test-Alarm', 'So sieht eine Warnung aus, wenn bei VAIs etwas schiefläuft.');
+  await alarm(`test-${Date.now()}`, 'Test-Alarm', 'So sieht eine Warnung aus, wenn bei ApeX etwas schiefläuft.');
   res.json({ ok: true });
 }));
 

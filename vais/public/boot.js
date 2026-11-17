@@ -77,7 +77,7 @@
   paintBar();
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintBar); } catch (e) { /* alt */ }
 
-  // Service Worker (App-Installation + „VAIs wacht auf“-Seite)
+  // Service Worker (App-Installation + „ApeX wacht auf“-Seite)
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
   }

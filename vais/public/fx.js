@@ -1,4 +1,4 @@
-// Effekte für VAIs: lebendiges Logo, Himmel je nach Tageszeit, 3D-Karten (Beta) und geheime Befehle.
+// Effekte für ApeX: lebendiges Logo, Himmel je nach Tageszeit, 3D-Karten (Beta) und geheime Befehle.
 // Alles respektiert „Bewegung reduzieren“ und lässt sich in den Einstellungen abschalten.
 const quiet = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const pref = (key, def = true) => { try { const v = localStorage.getItem(key); return v === null ? def : v === 'on'; } catch { return def; } };
@@ -16,7 +16,7 @@ export function setBusy(busy) { document.body.classList.toggle('ai-busy', !!busy
 // Beim Senden: ein leuchtender Punkt fliegt vom Senden-Knopf ins Logo, das Logo „schluckt“ ihn
 export function sendOrb(from) {
   if (!fxPrefs.logo() || quiet() || !from) return;
-  const logo = document.querySelector('.topbar .brand svg');
+  const logo = document.querySelector('.topbar .brand .brand-mark, .topbar .brand svg');
   if (!logo) return;
   const a = from.getBoundingClientRect();
   const b = logo.getBoundingClientRect();
@@ -112,7 +112,7 @@ export const setHaptic = (fn) => { buzz = fn || (() => {}); };
 
 // Das Schwarze-Loch-Logo groß in der Mitte (dreht sich, leuchtet, Akkretionsscheibe dahinter)
 function holeCenter(ms) {
-  const svg = document.querySelector('.topbar .brand svg, .brand svg');
+  const svg = document.querySelector('.topbar .brand .brand-mark, .topbar .brand svg, .brand .brand-mark, .brand svg');
   if (!svg) return null;
   const box = document.createElement('div');
   box.className = 'fx-hole-center';
@@ -126,7 +126,7 @@ function holeCenter(ms) {
 // 1. Erscheinen: Dunkelheit, Sterne, das Schwarze Loch wächst mit glühender Scheibe
 // 2. Sog: Sterne spiralen hinein, die App wird eingesaugt
 // 3. Hyper-Sprung: Lichtblitz, Sterne schießen mit Lichtgeschwindigkeit heraus, Bildschirm bebt
-// 4. Ankunft: bunte Nebel, Sternschnuppe, „VAIs Galaxie“ – dann ist alles wieder da
+// 4. Ankunft: bunte Nebel, Sternschnuppe, „ApeX Galaxie“ – dann ist alles wieder da
 function warp() {
   const TOTAL = 6600;
   const P1 = 1200, P2 = 2700, P3 = 4700;
@@ -242,7 +242,7 @@ function warp() {
 function title(ms) {
   const el = document.createElement('div');
   el.className = 'fx-title';
-  el.innerHTML = '<b>VAIs Galaxie</b><span>✦ willkommen im All ✦</span>';
+  el.innerHTML = '<b>ApeX Galaxie</b><span>✦ willkommen im All ✦</span>';
   document.body.append(el);
   setTimeout(() => el.remove(), ms);
 }

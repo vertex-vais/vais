@@ -1914,9 +1914,9 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 @keyframes caret { 50% { opacity: .25; } }
 
 /* Lebendiges Schwarzes Loch */
-.topbar .brand svg { transition: filter .4s; transform-origin: 50% 55%; }
-.fx-logo .topbar .brand svg { animation: hole-breathe 6s ease-in-out infinite; }
-.fx-logo.ai-busy .topbar .brand svg { animation: hole-spin 2.4s linear infinite, hole-glow 1.6s ease-in-out infinite; }
+.topbar .brand svg, .topbar .brand .brand-mark { transition: filter .4s; transform-origin: 50% 55%; }
+.fx-logo .topbar .brand svg, .fx-logo .topbar .brand .brand-mark { animation: hole-breathe 6s ease-in-out infinite; }
+.fx-logo.ai-busy .topbar .brand svg, .fx-logo.ai-busy .topbar .brand .brand-mark { animation: hole-spin 2.4s linear infinite, hole-glow 1.6s ease-in-out infinite; }
 @keyframes hole-breathe { 50% { transform: scale(1.04); filter: drop-shadow(0 0 4px color-mix(in oklab, var(--series-1, #8b7cff) 45%, transparent)); } }
 @keyframes hole-spin { 0% { transform: rotate(0deg) scale(1.05); } 100% { transform: rotate(360deg) scale(1.05); } }
 @keyframes hole-glow { 50% { filter: drop-shadow(0 0 8px var(--series-1, #8b7cff)) drop-shadow(0 0 14px var(--series-7, #3dd6c6)); } }
@@ -1952,8 +1952,8 @@ body[data-sky="night"]::before {
 @keyframes implode { 0% { transform: none; filter: none; } 45% { transform: scale(.04) rotate(540deg); filter: blur(2px) brightness(1.6); opacity: .2; } 55% { transform: scale(.04) rotate(540deg); opacity: 0; } 100% { transform: none; opacity: 1; filter: none; } }
 .fx-flip .stage { animation: flip 3s ease-in-out both; }
 @keyframes flip { 15%, 85% { transform: rotate(180deg); } }
-.fx-glow .topbar .brand svg { filter: drop-shadow(0 0 10px var(--series-1, #8b7cff)); }
-@media (prefers-reduced-motion: reduce) { .fx-logo .topbar .brand svg, body[data-sky]::before, .card.typing-live .card-body > :last-child::after { animation: none !important; } }
+.fx-glow .topbar .brand svg, .fx-glow .topbar .brand .brand-mark { filter: drop-shadow(0 0 10px var(--series-1, #8b7cff)); }
+@media (prefers-reduced-motion: reduce) { .fx-logo .topbar .brand svg, .fx-logo .topbar .brand .brand-mark, body[data-sky]::before, .card.typing-live .card-body > :last-child::after { animation: none !important; } }
 
 /* Willkommens-Paket (nur einmal) */
 .welcome { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); background: radial-gradient(120% 80% at 50% 0%, #1d1a3a 0%, #0b0b12 70%); color: #f3f2ff; animation: fade .35s ease both; overflow-y: auto; }
@@ -1964,7 +1964,7 @@ body[data-sky="night"]::before {
   radial-gradient(1px 1px at 18% 88%, #fff5, transparent 60%), radial-gradient(1px 1px at 62% 92%, #fff5, transparent 60%); animation: twinkle 5s ease-in-out infinite; }
 .welcome-in { position: relative; width: min(440px, 100%); text-align: center; display: grid; gap: 14px; }
 .welcome-logo { width: 150px; margin: 0 auto 4px; color: #fff; animation: welcome-hole 1.4s cubic-bezier(.2, .8, .2, 1) both, hole-breathe 5s ease-in-out 1.4s infinite; filter: drop-shadow(0 0 18px #8b7cff) drop-shadow(0 0 40px #3dd6c6aa); }
-.welcome-logo svg { width: 100%; height: auto; display: block; }
+.welcome-logo svg, .welcome-logo .brand-mark { width: 100%; height: auto; display: block; }
 @keyframes welcome-hole { from { transform: scale(.2) rotate(-200deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .welcome h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(32px, 8vw, 44px); line-height: 1.1; background: linear-gradient(100deg, #fff 30%, #b9aaff 65%, #6fe7d8); -webkit-background-clip: text; background-clip: text; color: transparent; animation: fadeUp .6s ease .2s both; }
 .welcome-sub { margin: 0; color: #c9c6e8; animation: fadeUp .6s ease .28s both; }

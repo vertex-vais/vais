@@ -1,4 +1,4 @@
-// Admin-Seite von VAIs
+// Admin-Seite von ApeX
 import { t, LOCALE, translateDom } from './i18n.js';
 import { renderChart } from './render.js';
 
@@ -172,7 +172,7 @@ function paintServer(m, health) {
   $('#server-mem').innerHTML = `
     <div class="adm-key-meter"><small>${t('Arbeitsspeicher', 'Memory')}: <b>${m.rss} MB</b> / 512 MB · ${t('Höchstwert', 'peak')} ${m.peak} MB · ${t('läuft seit', 'up for')} ${up}</small>
       <span class="adm-bar${pct >= 80 ? ' full' : ''}"><i style="width:${pct}%"></i></span></div>
-    <small class="muted">${t(`Ab ${m.limit} MB leert VAIs automatisch Zwischenspeicher.`, `From ${m.limit} MB VAIs clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>
+    <small class="muted">${t(`Ab ${m.limit} MB leert ApeX automatisch Zwischenspeicher.`, `From ${m.limit} MB ApeX clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>
     <small class="muted">🔎 ${t('Websuche', 'Web search')}: ${m.search ? `Tavily ${m.search.tavily ? '✓' : '–'} · Exa ${m.search.exa ? '✓' : '–'} · Groq ${m.search.groq === false ? '–' : '✓'} · Wikipedia ✓` : '–'}</small>
     <small class="muted">${m.keepAlive?.on ? `☕ ${t('Wachhalten aktiv', 'Keep-alive on')}${m.keepAlive.last ? ` · ${t('zuletzt', 'last')} ${when(m.keepAlive.last)} ${m.keepAlive.ok ? '✓' : '✕'}` : ''}` : `💤 ${t('Wachhalten aus (nur auf Render aktiv)', 'Keep-alive off (only active on Render)')}`}</small>`;
   const list = [...(health ?? [])].sort((a, b) => Number(a.ok) - Number(b.ok));
@@ -240,7 +240,7 @@ function paintMaint(m) {
   if (document.activeElement !== $('#maint-msg')) $('#maint-msg').value = m.message || '';
   $('#maint-state').textContent = m.on
     ? t(`🛠️ An seit ${when(m.since)} – nur Admins und Mods können chatten.`, `🛠️ On since ${when(m.since)} – only admins and mods can chat.`)
-    : t('Aus – alle können VAIs normal nutzen.', 'Off – everyone can use VAIs normally.');
+    : t('Aus – alle können ApeX normal nutzen.', 'Off – everyone can use ApeX normally.');
 }
 async function saveMaint(on) {
   try {
@@ -465,7 +465,7 @@ function renderKeys(providers) {
       ${p.keys.length ? `<ul>${p.keys.map((k, i) => `
         <li><span class="adm-key-role">${t('Nr.', 'No.')} ${i + 1}</span><code>${esc(k.id)}</code>
           <span class="adm-key-state ${k.state}">${STATE[k.state]}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>
-          <small>${k.source === 'render' ? 'Render' : 'Admin'}</small>
+          <small>${k.source === 'render' ? 'Render' : k.source === 'panel' ? 'API-Keys' : 'Admin'}</small>
           ${k.source === 'admin' ? `<button class="adm-link danger" data-rm-key="${esc(k.id)}" data-provider="${p.provider}">${t('Entfernen', 'Remove')}</button>` : ''}
           ${keyUsageHtml(k.usage)}
         </li>`).join('')}</ul>` : ''}
@@ -593,7 +593,99 @@ $('#reset-board').addEventListener('click', async () => {
 $('#undo-board').addEventListener('click', async () => {
   try { boardState((await api('reset-board', { undo: true })).boardResetAt); toast(t('Alte Stimmen zählen wieder.', 'Old votes count again.')); load(); } catch (err) { toast(err.message); }
 });
-$('#refresh').addEventListener('click', () => { load(); loadUsers(); if (role === 'admin') loadKeys(); });
+// ── API-Keys (alle Anbieter, verschlüsselt) ─────────────────────
+const pkName = (p) => (document.documentElement.dataset.lang === 'en' ? p.labelEn : p.label);
+function renderProviderKeys(data) {
+  const warn = $('#pk-warn');
+  if (warn) warn.hidden = data.encryption === 'env';
+  const sel = $('#pk-provider');
+  if (sel && data.providers && sel.options.length !== data.providers.length) {
+    const current = sel.value;
+    sel.innerHTML = data.providers.map((p) => `<option value="${esc(p.id)}">${esc(pkName(p))}${p.adminOnly ? ` (${t('nur Admin', 'admin only')})` : ''}</option>`).join('');
+    if (current) sel.value = current;
+  }
+  const envNames = (data.providers ?? []).filter((p) => p.envConfigured).map((p) => p.env);
+  $('#pk-env').textContent = envNames.length
+    ? t(`Ersatz aus der Umgebung, Werte werden nicht angezeigt: ${envNames.join(', ')}`, `Environment fallback, values are not shown: ${envNames.join(', ')}`)
+    : '';
+  const custom = $('#pk-provider')?.value === 'custom';
+  $('#pk-extra').hidden = !custom;
+  const nvidia = $('#pk-provider')?.value === 'nvidia';
+  $('#pk-nvidia').hidden = !nvidia;
+  $('#pk-keys').innerHTML = data.keys.length ? data.keys.map((k) => `
+    <li class="ck-row">
+      <span class="ck-label"><b>${esc(document.documentElement.dataset.lang === 'en' ? k.providerLabelEn : k.providerLabel)}</b> <span>${esc(k.label)}</span> <code>${esc(k.masked)}</code>
+        ${k.adminOnly ? `<small class="ck-badge">${t('nur Admin', 'admin only')}</small>` : ''}
+        ${k.baseUrl ? `<small class="muted">${esc(k.baseUrl)} · ${esc(k.model || '')}</small>` : ''}
+        ${k.readable ? '' : `<small class="ck-bad">${t('nicht lesbar', 'unreadable')}</small>`}</span>
+      <label class="ck-on"><input type="checkbox" data-pk-on="${k.id}" ${k.enabled ? 'checked' : ''} aria-label="${t('Aktiv', 'On')}"> <span>${k.enabled ? t('aktiv', 'on') : t('aus', 'off')}</span></label>
+      <button type="button" class="adm-btn small" data-pk-test="${k.id}">${t('Testen', 'Test')}</button>
+      <button type="button" class="adm-btn small danger" data-pk-del="${k.id}">${t('Löschen', 'Delete')}</button>
+      <span class="ck-result" data-pk-result="${k.id}"></span>
+    </li>`).join('') : `<li class="adm-empty">${t('Noch kein Schlüssel.', 'No key yet.')}</li>`;
+}
+async function loadProviderKeys() {
+  try { renderProviderKeys(await api('provider-keys')); } catch (err) { toast(err.message); }
+}
+$('#pk-provider')?.addEventListener('change', () => {
+  const custom = $('#pk-provider').value === 'custom';
+  $('#pk-extra').hidden = !custom;
+  $('#pk-nvidia').hidden = $('#pk-provider').value !== 'nvidia';
+});
+$('#pk-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const provider = $('#pk-provider').value;
+  const label = $('#pk-label').value.trim();
+  const key = $('#pk-value').value.trim();
+  const baseUrl = $('#pk-base').value.trim();
+  const model = $('#pk-model').value.trim();
+  if (!label || !key) return toast(t('Bezeichnung und Schlüssel eintragen.', 'Enter a label and a key.'));
+  if (provider === 'custom' && (!baseUrl || !model)) return toast(t('Basis-URL und Modellname eintragen.', 'Enter a base URL and a model name.'));
+  const btn = e.currentTarget.querySelector('button');
+  btn.disabled = true;
+  try {
+    renderProviderKeys(await api('provider-keys', { provider, label, key, baseUrl, model }));
+    $('#pk-label').value = '';
+    $('#pk-value').value = '';
+    toast(t('Gespeichert. Angezeigt werden nur die letzten 4 Zeichen.', 'Saved. Only the last 4 characters are shown.'));
+  } catch (err) { toast(err.message); } finally { btn.disabled = false; }
+});
+$('#pk-keys')?.addEventListener('change', async (e) => {
+  const box = e.target.closest('[data-pk-on]');
+  if (!box) return;
+  try { renderProviderKeys(await api('provider-keys/toggle', { id: Number(box.dataset.pkOn), enabled: box.checked })); }
+  catch (err) { toast(err.message); loadProviderKeys(); }
+});
+$('#pk-keys')?.addEventListener('click', async (e) => {
+  const test = e.target.closest('[data-pk-test]');
+  const del = e.target.closest('[data-pk-del]');
+  if (test) {
+    test.disabled = true;
+    const old = test.textContent;
+    test.textContent = t('Teste …', 'Testing …');
+    try {
+      const data = await api('provider-keys/test', { id: Number(test.dataset.pkTest) });
+      renderProviderKeys(data);
+      const again = document.querySelector(`[data-pk-result="${test.dataset.pkTest}"]`);
+      if (again) {
+        again.textContent = data.ok ? t('OK', 'OK') : (data.message || t('Fehler', 'Error'));
+        again.className = `ck-result ${data.ok ? 'ok' : 'bad'}`;
+      }
+    } catch (err) { toast(err.message); }
+    finally {
+      const btn = document.querySelector(`[data-pk-test="${test.dataset.pkTest}"]`);
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+    }
+    return;
+  }
+  if (del) {
+    if (!confirm(t('Diesen Schlüssel löschen?', 'Delete this key?'))) return;
+    try { renderProviderKeys(await api('provider-keys/remove', { id: Number(del.dataset.pkDel) })); toast(t('Entfernt.', 'Removed.')); }
+    catch (err) { toast(err.message); }
+  }
+});
+
+$('#refresh').addEventListener('click', () => { load(); loadUsers(); if (role === 'admin') { loadKeys(); loadProviderKeys(); } });
 
 translateDom();
 // Erst die Rolle kennen (Admin oder Mod), dann den Rest laden
@@ -601,5 +693,5 @@ load().then(() => {
   loadUsers();
   loadSitesAdmin();
   loadFeedback();
-  if (role === 'admin') { loadLimits(); loadKeys(); }
+  if (role === 'admin') { loadLimits(); loadKeys(); loadProviderKeys(); }
 });

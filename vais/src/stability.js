@@ -104,7 +104,7 @@ if (PUBLIC_URL && process.env.KEEP_ALIVE !== 'off' && process.env.NODE_ENV !== '
   keepAlive.on = true;
   const ping = async () => {
     try {
-      const r = await fetch(`${PUBLIC_URL}/healthz?keepalive=1`, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'VAIs-KeepAlive' } });
+      const r = await fetch(`${PUBLIC_URL}/healthz?keepalive=1`, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'Apex-KeepAlive' } });
       keepAlive.ok = r.ok;
     } catch { keepAlive.ok = false; }
     keepAlive.last = Date.now();

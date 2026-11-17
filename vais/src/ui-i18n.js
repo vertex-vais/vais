@@ -1,5 +1,5 @@
 // Weitere Sprachen für die Oberfläche (Türkisch, Spanisch, Französisch, Ukrainisch).
-// Die ~600 englischen Texte (public/i18n/strings.json) übersetzt VAIs einmalig selbst mit einem
+// Die ~600 englischen Texte (public/i18n/strings.json) übersetzt ApeX einmalig selbst mit einem
 // kostenlosen Modell und speichert das Ergebnis. Neue Texte werden nach einem Update nachübersetzt.
 import { readFileSync } from 'node:fs';
 import { getSetting, setSetting } from './db.js';
@@ -28,8 +28,8 @@ async function pickModel() {
 
 async function translateBatch(l, items, model) {
   const prompt = [
-    `Translate these user-interface texts of the chat app "VAIs" from English to ${NAMES[l]}.`,
-    `Use a friendly, ${STYLE[l]} tone, short like in an app. Keep "VAIs", "Agent X", model names, emojis, symbols (→ ✓ · …), numbers and punctuation style.`,
+    `Translate these user-interface texts of the chat app "ApeX" from English to ${NAMES[l]}.`,
+    `Use a friendly, ${STYLE[l]} tone, short like in an app. Keep "ApeX", "Agent X", model names, emojis, symbols (→ ✓ · …), numbers and punctuation style.`,
     `Answer with ONLY a JSON array of exactly ${items.length} strings, in the same order. No explanations.`,
     '',
     JSON.stringify(items),

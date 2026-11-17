@@ -14,7 +14,7 @@ export async function maintenance() {
 }
 export function forgetMaintenance() { cache = { at: 0, value: null }; }
 
-export const maintenanceText = (m) => m.message || t('VAIs wird gerade gewartet. Bitte versuch es gleich nochmal.', 'VAIs is under maintenance. Please try again shortly.');
+export const maintenanceText = (m) => m.message || t('ApeX wird gerade gewartet. Bitte versuch es gleich nochmal.', 'ApeX is under maintenance. Please try again shortly.');
 
 // Middleware für den Chat: Schreiben (POST) ist im Wartungsmodus nur für Admins und Mods erlaubt
 const GENERATING = new Set(['/start', '/stream', '/inject', '/organize', '/extras', '/tts', '/transcribe', '/improve', '/translate', '/sites/publish']);
