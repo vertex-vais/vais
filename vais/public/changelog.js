@@ -6,7 +6,7 @@ export const CHANGES = () => [
     id: 15, date: '2026-11-02',
     items: [
       ['🍳', t('Kocht …', 'Cooking …'), t('Solange die KI nachdenkt, siehst du kurze Sprüche wie „Kocht …“, „Cooked …“ oder „Tüftelt …“.', 'While the AI is thinking you see short phrases like “Cooking …”, “Cooked …” or “Crafting …”.')],
-      ['📌', t('Antworten vom Apex-Team', 'Answers from the Apex team'), t('Häufige Fragen beantwortet das Team jetzt selbst – sofort und ohne dein Tageslimit zu verbrauchen.', 'The team now answers frequent questions itself – instantly and without using your daily limit.')],
+      ['📌', t('Antworten vom ApeX-Team', 'Answers from the ApeX team'), t('Häufige Fragen beantwortet das Team jetzt selbst – sofort und ohne dein Tageslimit zu verbrauchen.', 'The team now answers frequent questions itself – instantly and without using your daily limit.')],
       ['🌌', t('Neue Galaxie', 'New galaxy'), t('Der geheime Galaxie-Befehl ist jetzt ein kleiner Film … 🤫', 'The secret galaxy command is now a little movie … 🤫')],
     ],
   },
@@ -23,7 +23,7 @@ export const CHANGES = () => [
   {
     id: 13, date: '2026-11-02',
     items: [
-      ['✨', t('Auto-Modus', 'Auto mode'), t('Wähl „✨ Automatisch“ als Modell – Apex nimmt für jede Frage das passende: Code, Mathe, Aktuelles, Kreatives oder schnell bei kurzen Fragen.', 'Pick “✨ Automatic” as the model – Apex chooses the right one for every question: code, maths, current info, creative or fast for short questions.')],
+      ['✨', t('Auto-Modus', 'Auto mode'), t('Wähl „✨ Automatisch“ als Modell – ApeX nimmt für jede Frage das passende: Code, Mathe, Aktuelles, Kreatives oder schnell bei kurzen Fragen.', 'Pick “✨ Automatic” as the model – ApeX chooses the right one for every question: code, maths, current info, creative or fast for short questions.')],
       ['👆', t('Wischgesten & Vibration', 'Swipe gestures & haptics'), t('Im Chat nach rechts wischen öffnet das Menü, nach links ein neuer Chat. Kurzes Tippen beim Senden und wenn die Antwort fertig ist (iPhone ab iOS 18). Beides in den Einstellungen abschaltbar.', 'In a chat, swipe right for the menu and left for a new chat. A short tap when sending and when the answer is ready (iPhone from iOS 18). Both can be turned off in settings.')],
       ['📴', t('Offline schreiben', 'Write offline'), t('Ohne Internet geschriebene Nachrichten werden gemerkt und automatisch gesendet, sobald du wieder online bist.', 'Messages written without internet are kept and sent automatically when you are back online.')],
       ['🔐', t('Angemeldete Geräte', 'Signed-in devices'), t('In den Einstellungen siehst du alle Geräte mit deinem Konto und kannst sie abmelden. Bei einer neuen Anmeldung bekommst du eine Benachrichtigung.', 'In settings you see all devices with your account and can sign them out. You get a notification on every new sign-in.')],

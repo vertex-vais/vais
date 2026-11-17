@@ -193,11 +193,11 @@ test('Doppelte Updates (Telegram wiederholt) werden nur einmal verarbeitet', asy
 });
 
 test('Markdown → Telegram-HTML: sicher, Code, Links, Tabellen unverändert', () => {
-  const html = toTelegramHtml('# Titel\n**fett** und *kursiv* und `a<b>` und [Apex](https://vais.de?a=1&b=2)\n- Punkt\n```js\nif (a < b) {}\n```\n| A | B |\n|---|---|\n| 1 | <2> |\n> Zitat\nx < y & z');
+  const html = toTelegramHtml('# Titel\n**fett** und *kursiv* und `a<b>` und [ApeX](https://vais.de?a=1&b=2)\n- Punkt\n```js\nif (a < b) {}\n```\n| A | B |\n|---|---|\n| 1 | <2> |\n> Zitat\nx < y & z');
   assert.match(html, /<b>Titel<\/b>/);
   assert.match(html, /<b>fett<\/b> und <i>kursiv<\/i>/);
   assert.match(html, /<code>a&lt;b&gt;<\/code>/);
-  assert.match(html, /<a href="https:\/\/vais\.de\?a=1&amp;b=2">Apex<\/a>/);
+  assert.match(html, /<a href="https:\/\/vais\.de\?a=1&amp;b=2">ApeX<\/a>/);
   assert.match(html, /• Punkt/);
   assert.match(html, /<pre><code class="language-js">if \(a &lt; b\) \{\}<\/code><\/pre>/);
   assert.match(html, /<pre>\| A \| B \|\n\|---\|---\|\n\| 1 \| &lt;2&gt; \|<\/pre>/); // Tabelle Zeichen für Zeichen

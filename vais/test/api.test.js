@@ -251,7 +251,7 @@ test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
   assert.match(page.headers.get('content-security-policy'), /^sandbox allow-scripts/);
   assert.equal(page.headers.get('x-frame-options'), null);
   const html = await page.text();
-  assert.match(html, /Erstellt mit Apex/);
+  assert.match(html, /Erstellt mit ApeX/);
   assert.match(html, /<button id="b"/);
   assert.match(html, /<!--vx:zaehler-->/); // Baukasten-Markierungen für spätere Änderungen
   // fremde Nutzer können sie nicht offline nehmen
@@ -576,14 +576,14 @@ test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
 test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Fragen', async () => {
   const a = client();
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
-  assert.equal((await a.json('/api/admin/faq', { question: 'Wer hat Apex gemacht?', answer: 'Apex hat Leeam gebaut 🚀' })).status, 200);
+  assert.equal((await a.json('/api/admin/faq', { question: 'Wer hat ApeX gemacht?', answer: 'ApeX hat Leeam gebaut 🚀' })).status, 200);
   const u = await signUp('faq@example.com');
   const first = (await u.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
   const start = await u.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'F' });
   const before = (await u.json('/api/chat/usage')).data.kinds.text.used;
   const r = await stream(u, start.data.id, 'wer hat bitte apex gemacht');
   assert.ok(r.lines.some((l) => l.faq));
-  assert.equal(r.text, 'Apex hat Leeam gebaut 🚀');
+  assert.equal(r.text, 'ApeX hat Leeam gebaut 🚀');
   assert.equal((await u.json('/api/chat/usage')).data.kinds.text.used, before); // zählt nicht
   const other = await stream(u, start.data.id, 'Was ist ein Wal?', 1);
   assert.ok(!other.lines.some((l) => l.faq));

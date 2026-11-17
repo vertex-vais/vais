@@ -1,5 +1,5 @@
 // Erinnerungen per Push-Benachrichtigung (Web Push, kostenlos).
-// Die Schlüssel (VAPID) erzeugt Apex beim ersten Start selbst und speichert sie in der Datenbank.
+// Die Schlüssel (VAPID) erzeugt ApeX beim ersten Start selbst und speichert sie in der Datenbank.
 import { Router } from 'express';
 import webpush from 'web-push';
 import { get, run, all, getSetting, setSetting } from './db.js';

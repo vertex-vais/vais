@@ -1,11 +1,11 @@
-// Service Worker für Apex:
-// - macht Apex als App installierbar
-// - zeigt „Apex wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
+// Service Worker für ApeX:
+// - macht ApeX als App installierbar
+// - zeigt „ApeX wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v6';
-const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/favicon-32-v2.png', '/icons/apex-192-v2.png'];
+const CACHE = 'vais-v7';
+const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/apex-mark.png', '/favicon-32-v3.png', '/icons/apex-192-v3.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
-const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/apex-512-v2.png'];
+const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/apex-512-v3.png'];
 const WAKE_AFTER = 4500; // so lange warten wir auf den Server, bevor die Aufwach-Seite kommt
 
 self.addEventListener('install', (event) => {
@@ -30,7 +30,7 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
-const wakingPage = async () => (await caches.match('/waking.html')) || new Response('Apex …', { headers: { 'Content-Type': 'text/html' } });
+const wakingPage = async () => (await caches.match('/waking.html')) || new Response('ApeX …', { headers: { 'Content-Type': 'text/html' } });
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -91,11 +91,11 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
-  event.waitUntil(self.registration.showNotification(data.title || 'Apex', {
+  event.waitUntil(self.registration.showNotification(data.title || 'ApeX', {
     body: data.body || '',
     tag: data.tag,
-    icon: '/icons/apex-192-v2.png',
-    badge: '/icons/apex-192-v2.png',
+    icon: '/icons/apex-192-v3.png',
+    badge: '/icons/apex-192-v3.png',
     data: { url: data.url || '/' },
   }));
 });

@@ -1,4 +1,9 @@
-// Erzeugt das Apex-Zeichen (stilisierter Gipfel / A) als PNG in den Größen für Favicon, Apple und PWA.
+// The official ApeX mark is the black-hole artwork (v3 PNGs in public/icons).
+// This old stylized-A generator must not overwrite those files.
+console.log('Skipped: v3 icons are the official ApeX mark, not generated here.');
+process.exit(0);
+
+// Legacy generator kept below for reference (stilisierter Gipfel / A).
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -109,12 +114,12 @@ function write(path, size, opts) {
 }
 
 const root = new URL('../public/', import.meta.url).pathname;
-write(`${root}favicon-32-v2.png`, 32, { pad: 0.12, rounded: true, radius: 0.22 });
-write(`${root}icons/apple-touch-icon-v2.png`, 180, { pad: 0.18 });
-write(`${root}icons/apex-192-v2.png`, 192, { pad: 0.16 });
-write(`${root}icons/apex-512-v2.png`, 512, { pad: 0.16 });
-write(`${root}icons/apex-maskable-192-v2.png`, 192, { pad: 0.18 });
-write(`${root}icons/apex-maskable-512-v2.png`, 512, { pad: 0.18 });
+write(`${root}favicon-32-v3.png`, 32, { pad: 0.12, rounded: true, radius: 0.22 });
+write(`${root}icons/apple-touch-icon-v3.png`, 180, { pad: 0.18 });
+write(`${root}icons/apex-192-v3.png`, 192, { pad: 0.16 });
+write(`${root}icons/apex-512-v3.png`, 512, { pad: 0.16 });
+write(`${root}icons/apex-maskable-192-v3.png`, 192, { pad: 0.18 });
+write(`${root}icons/apex-maskable-512-v3.png`, 512, { pad: 0.18 });
 write(`${root}icons/apple-touch-icon.png`, 180, { pad: 0.18 });
 write(`${root}icons/app-192.png`, 192, { pad: 0.16 });
 write(`${root}icons/app-512.png`, 512, { pad: 0.16 });

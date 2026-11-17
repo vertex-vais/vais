@@ -122,8 +122,8 @@ setInterval(() => {
 }, 10 * 60 * 1000).unref();
 
 // Agent X steht als eigenes „Modell“ ganz oben in der Liste
-const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'Apex', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
-const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'Apex', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
+const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
+const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
   res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
@@ -1025,7 +1025,7 @@ chat.get('/export', wrap(async (req, res) => {
   ]);
   const file = {
     exportedAt: new Date().toISOString(),
-    service: 'Apex',
+    service: 'ApeX',
     account: { email: user.email, created: new Date(Number(user.created_at)).toISOString() },
     settings: { instructions: user.instructions ?? '', memory: !user.memory_off, ownDailyLimit: user.daily_limit ?? null },
     memories: memories.map((m) => ({ text: m.text, created: new Date(Number(m.created_at)).toISOString() })),

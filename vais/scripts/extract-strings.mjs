@@ -1,5 +1,5 @@
 // Sammelt alle englischen Oberflächen-Texte (aus t('…', '…') und data-en="…") in public/i18n/strings.json.
-// Daraus übersetzt Apex die App einmalig in weitere Sprachen (siehe src/ui-i18n.js).
+// Daraus übersetzt ApeX die App einmalig in weitere Sprachen (siehe src/ui-i18n.js).
 // Aufruf: npm run strings
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';

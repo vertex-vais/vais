@@ -2,7 +2,7 @@
 //   OPENROUTER_API_KEY  → kostenlose OpenRouter-Modelle (Endung ":free")
 //   GEMINI_API_KEY      → Google Gemini / Gemma (Google AI Studio, kostenloses Kontingent)
 //   GROQ_API_KEY        → Groq (gpt-oss-120b/20b mit Websuche, Qwen)
-// Ohne Schlüssel läuft Apex im Demo-Modus mit Platzhalter-Modellen.
+// Ohne Schlüssel läuft ApeX im Demo-Modus mit Platzhalter-Modellen.
 //
 // Optional: OPENROUTER_EXTRA_MODELS="anthropic/claude-sonnet-4.5,openai/gpt-5" schaltet
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
@@ -431,14 +431,14 @@ const LISTERS = {
 };
 
 const DEMO_MODELS = [
-  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'code', 'vision'] },
-  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'vision'] },
-  { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'Apex Demo', icon: null, caps: ['text', 'code'] },
-  { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'Apex Demo', icon: null, caps: ['text'] },
-  { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'Apex Demo', icon: null, caps: ['web'] },
-  { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'Apex Demo', icon: null, caps: ['web'] },
-  { id: 'demo:prisma', provider: 'demo', upstream: 'prisma', name: 'prisma-image-demo', maker: 'Apex Demo', icon: null, caps: ['image'] },
-  { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'Apex Demo', icon: null, caps: ['image'] },
+  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'ApeX Demo', icon: null, caps: ['text', 'code', 'vision'] },
+  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'ApeX Demo', icon: null, caps: ['text', 'vision'] },
+  { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'ApeX Demo', icon: null, caps: ['text', 'code'] },
+  { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'ApeX Demo', icon: null, caps: ['text'] },
+  { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'ApeX Demo', icon: null, caps: ['web'] },
+  { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'ApeX Demo', icon: null, caps: ['web'] },
+  { id: 'demo:prisma', provider: 'demo', upstream: 'prisma', name: 'prisma-image-demo', maker: 'ApeX Demo', icon: null, caps: ['image'] },
+  { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'ApeX Demo', icon: null, caps: ['image'] },
 ];
 
 const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5, github: 6, custom: 7 };
@@ -518,8 +518,8 @@ export function modelKey(id) {
   return id.replace(/^openrouter:/, '').replace(/#search$/, '');
 }
 export async function describeModel(id) {
-  if (id === 'agent') return { name: 'Agent X', maker: 'Apex', icon: 'vais' };
-  if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'Apex', icon: 'vais' };
+  if (id === 'agent') return { name: 'Agent X', maker: 'ApeX', icon: 'vais' };
+  if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'ApeX', icon: 'vais' };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
   const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
@@ -608,7 +608,7 @@ export async function streamChat({ model, messages, signal, think = false, onTex
   const headersFor = (key) => ({
     Authorization: `Bearer ${key}`,
     'Content-Type': 'application/json',
-    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'Apex' } : {}),
+    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
   });
   // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
   const idle = new AbortController();
@@ -1010,7 +1010,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'Apex' } : {}),
+      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
     },
     body: JSON.stringify({
       model: upstream,

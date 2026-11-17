@@ -1,6 +1,6 @@
 // Webseiten von Agent X/Code-Modellen veröffentlichen: eigener Link /w/<id>, den jeder öffnen kann.
 // Sicherheit: Die Seite läuft mit „CSP sandbox“ in einem eigenen, abgeschotteten Ursprung –
-// sie kommt weder an Cookies noch an die Apex-Schnittstellen heran.
+// sie kommt weder an Cookies noch an die ApeX-Schnittstellen heran.
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { get, run, all } from './db.js';
@@ -48,7 +48,7 @@ const SITE_CSP = [
 ].join('; ');
 
 const badge = (id) => `
-<a href="/" target="_blank" rel="noopener" style="position:fixed;right:10px;bottom:10px;z-index:2147483647;font:500 12px/1 system-ui,sans-serif;padding:7px 10px;border-radius:999px;background:rgba(20,20,18,.78);color:#fff;text-decoration:none;backdrop-filter:blur(6px)">Erstellt mit Apex</a>
+<a href="/" target="_blank" rel="noopener" style="position:fixed;right:10px;bottom:10px;z-index:2147483647;font:500 12px/1 system-ui,sans-serif;padding:7px 10px;border-radius:999px;background:rgba(20,20,18,.78);color:#fff;text-decoration:none;backdrop-filter:blur(6px)">Erstellt mit ApeX</a>
 <a href="/melden?site=${encodeURIComponent(id)}" target="_blank" rel="noopener" style="position:fixed;left:10px;bottom:10px;z-index:2147483647;font:500 11px/1 system-ui,sans-serif;padding:6px 9px;border-radius:999px;background:rgba(20,20,18,.55);color:#fff;text-decoration:none">🚩 Melden</a>`;
 
 // Öffentliche Seite
@@ -60,7 +60,7 @@ export async function serveSite(req, res) {
   run('UPDATE sites SET views = views + 1 WHERE id = ?', site.id).catch(() => {});
   res.removeHeader('X-Frame-Options');
   res.set('Content-Security-Policy', SITE_CSP);
-  const shim = "<script>/* Apex: Speicher-Ersatz für abgeschottete Seiten */(function(){function mk(){var m=new Map();return{getItem:function(k){return m.has(String(k))?m.get(String(k)):null},setItem:function(k,v){m.set(String(k),String(v))},removeItem:function(k){m.delete(String(k))},clear:function(){m.clear()},key:function(i){return Array.from(m.keys())[i]||null},get length(){return m.size}}}['localStorage','sessionStorage'].forEach(function(n){try{window[n].getItem('x')}catch(e){try{Object.defineProperty(window,n,{value:mk(),configurable:true})}catch(e2){}}});try{document.cookie}catch(e){try{Object.defineProperty(document,'cookie',{get:function(){return''},set:function(){},configurable:true})}catch(e2){}}})();</script>";
+  const shim = "<script>/* ApeX: Speicher-Ersatz für abgeschottete Seiten */(function(){function mk(){var m=new Map();return{getItem:function(k){return m.has(String(k))?m.get(String(k)):null},setItem:function(k,v){m.set(String(k),String(v))},removeItem:function(k){m.delete(String(k))},clear:function(){m.clear()},key:function(i){return Array.from(m.keys())[i]||null},get length(){return m.size}}}['localStorage','sessionStorage'].forEach(function(n){try{window[n].getItem('x')}catch(e){try{Object.defineProperty(window,n,{value:mk(),configurable:true})}catch(e2){}}});try{document.cookie}catch(e){try{Object.defineProperty(document,'cookie',{get:function(){return''},set:function(){},configurable:true})}catch(e2){}}})();</script>";
   const withShim = /<head[^>]*>/i.test(site.html) ? site.html.replace(/<head[^>]*>/i, (h) => h + shim) : shim + site.html;
   const html = /<\/body>/i.test(withShim) ? withShim.replace(/<\/body>(?![\s\S]*<\/body>)/i, `${badge(site.id)}</body>`) : withShim + badge(site.id);
   res.type('html').send(html);

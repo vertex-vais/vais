@@ -1,4 +1,4 @@
-// Admin-Seite von Apex
+// Admin-Seite von ApeX
 import { t, LOCALE, translateDom } from './i18n.js';
 import { renderChart } from './render.js';
 
@@ -172,7 +172,7 @@ function paintServer(m, health) {
   $('#server-mem').innerHTML = `
     <div class="adm-key-meter"><small>${t('Arbeitsspeicher', 'Memory')}: <b>${m.rss} MB</b> / 512 MB · ${t('Höchstwert', 'peak')} ${m.peak} MB · ${t('läuft seit', 'up for')} ${up}</small>
       <span class="adm-bar${pct >= 80 ? ' full' : ''}"><i style="width:${pct}%"></i></span></div>
-    <small class="muted">${t(`Ab ${m.limit} MB leert Apex automatisch Zwischenspeicher.`, `From ${m.limit} MB Apex clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>
+    <small class="muted">${t(`Ab ${m.limit} MB leert ApeX automatisch Zwischenspeicher.`, `From ${m.limit} MB ApeX clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>
     <small class="muted">🔎 ${t('Websuche', 'Web search')}: ${m.search ? `Tavily ${m.search.tavily ? '✓' : '–'} · Exa ${m.search.exa ? '✓' : '–'} · Groq ${m.search.groq === false ? '–' : '✓'} · Wikipedia ✓` : '–'}</small>
     <small class="muted">${m.keepAlive?.on ? `☕ ${t('Wachhalten aktiv', 'Keep-alive on')}${m.keepAlive.last ? ` · ${t('zuletzt', 'last')} ${when(m.keepAlive.last)} ${m.keepAlive.ok ? '✓' : '✕'}` : ''}` : `💤 ${t('Wachhalten aus (nur auf Render aktiv)', 'Keep-alive off (only active on Render)')}`}</small>`;
   const list = [...(health ?? [])].sort((a, b) => Number(a.ok) - Number(b.ok));
@@ -240,7 +240,7 @@ function paintMaint(m) {
   if (document.activeElement !== $('#maint-msg')) $('#maint-msg').value = m.message || '';
   $('#maint-state').textContent = m.on
     ? t(`🛠️ An seit ${when(m.since)} – nur Admins und Mods können chatten.`, `🛠️ On since ${when(m.since)} – only admins and mods can chat.`)
-    : t('Aus – alle können Apex normal nutzen.', 'Off – everyone can use Apex normally.');
+    : t('Aus – alle können ApeX normal nutzen.', 'Off – everyone can use ApeX normally.');
 }
 async function saveMaint(on) {
   try {

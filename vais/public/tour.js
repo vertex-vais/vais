@@ -3,7 +3,7 @@ import { t } from './i18n.js';
 
 const KEY = 'vais_tour_done';
 const STEPS = () => [
-  { title: t('Willkommen bei Apex 👋', 'Welcome to Apex 👋'), text: t('Hier nutzt du die besten KI-Modelle kostenlos – und vergleichst sie miteinander. Eine kurze Tour?', 'Use the best AI models for free – and compare them. A quick tour?') },
+  { title: t('Willkommen bei ApeX 👋', 'Welcome to ApeX 👋'), text: t('Hier nutzt du die besten KI-Modelle kostenlos – und vergleichst sie miteinander. Eine kurze Tour?', 'Use the best AI models for free – and compare them. A quick tour?') },
   { target: '#mode-btn', title: t('Modus', 'Mode'), text: t('Agent X erledigt Aufgaben selbstständig. Im Battle antworten zwei geheime Modelle und du stimmst ab. Oder nutze zwei Modelle nebeneinander bzw. eins direkt.', 'Agent X does tasks on its own. In Battle two hidden models answer and you vote. Or use two models side by side, or one directly.') },
   { target: '#modality-btn', title: t('Was soll entstehen?', 'What do you want?'), text: t('Text, Code und Webseiten, Websuche mit Quellen oder Bilder.', 'Text, code and websites, web search with sources, or images.') },
   { target: '.composer', title: t('Frag irgendwas', 'Ask anything'), text: t('Mit + hängst du Bilder und PDFs an, mit dem Mikrofon sprichst du deine Frage.', 'Use + to attach images and PDFs, or tap the microphone to speak.') },

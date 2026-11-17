@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="theme-color" content="#000000">
-  <meta name="apple-mobile-web-app-title" content="Apex">
-  <title>Admin – Apex</title>
-  <meta name="title-en" content="Admin – Apex">
+  <meta name="apple-mobile-web-app-title" content="ApeX">
+  <title>Admin – ApeX</title>
+  <meta name="title-en" content="Admin – ApeX">
   <meta name="robots" content="noindex">
   <script src="/boot.js"></script>
-  <link rel="icon" href="/favicon-32-v2.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/favicon-32-v3.png" sizes="32x32" type="image/png">
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-v2.png" sizes="180x180">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-v3.png" sizes="180x180">
   <link rel="stylesheet" href="/fonts.css">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/admin.css">
@@ -20,7 +20,7 @@
 </head>
 <body class="admin">
   <header class="legal-top">
-    <a class="brand" href="/" aria-label="Apex"><svg viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M32 6 8 58h12L32 6zm0 0 24 52h-12L32 6zM22.77 46h18.46l-2.31-10h-13.84Z"/></svg><span>Apex</span></a>
+    <a class="brand" href="/" aria-label="ApeX"><img class="brand-mark" src="/icons/apex-mark.png" alt="" width="28" height="28"><span>ApeX</span></a>
     <span class="adm-badge">Admin</span>
     <button class="adm-refresh" id="refresh" type="button" aria-label="Aktualisieren" data-en-aria-label="Refresh">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
@@ -48,7 +48,7 @@
       <p class="adm-sub" data-en="Type a question and your answer below it. If someone asks the same (or almost the same – filler words, word order and small typos don’t matter; for longer questions one word may differ), your answer comes instantly – without AI and without using the daily limit.">Frage eintippen, darunter deine Antwort. Fragt jemand dasselbe (oder fast dasselbe – Füllwörter, Reihenfolge und kleine Tippfehler egal, bei längeren Fragen darf ein Wort anders sein), kommt sofort deine Antwort – ohne KI und ohne Tageslimit.</p>
       <form class="adm-faq-form" id="faq-form" novalidate data-admin-only>
         <input type="hidden" id="faq-id">
-        <input class="adm-input" id="faq-q" maxlength="300" placeholder="Frage, z. B. Wer hat Apex gemacht?" data-en-placeholder="Question, e.g. Who made Apex?">
+        <input class="adm-input" id="faq-q" maxlength="300" placeholder="Frage, z. B. Wer hat ApeX gemacht?" data-en-placeholder="Question, e.g. Who made ApeX?">
         <textarea class="adm-input" id="faq-a" rows="3" maxlength="4000" placeholder="Deine Antwort …" data-en-placeholder="Your answer …"></textarea>
         <p class="adm-hint" id="faq-test"></p>
         <div class="adm-row"><button class="adm-btn primary" type="submit" id="faq-save" data-en="Save answer">Antwort speichern</button><button class="adm-btn" type="button" id="faq-cancel" hidden data-en="Cancel">Abbrechen</button></div>
@@ -116,7 +116,7 @@
     <section class="adm-card" data-admin-only>
       <h2 data-en="Maintenance mode">Wartungsmodus</h2>
       <label class="adm-switch">
-        <span><b data-en="Pause Apex">Apex pausieren</b><small data-en="Nobody except admins and mods can start chats or generate anything. Everyone sees your message at the top of the app and on the status page. Reading old chats still works.">Niemand außer Admins und Mods kann dann chatten oder etwas erstellen. Alle sehen oben in der App und auf der Status-Seite deinen Hinweis. Alte Chats lesen geht weiter.</small></span>
+        <span><b data-en="Pause ApeX">ApeX pausieren</b><small data-en="Nobody except admins and mods can start chats or generate anything. Everyone sees your message at the top of the app and on the status page. Reading old chats still works.">Niemand außer Admins und Mods kann dann chatten oder etwas erstellen. Alle sehen oben in der App und auf der Status-Seite deinen Hinweis. Alte Chats lesen geht weiter.</small></span>
         <input type="checkbox" id="maint-on" role="switch">
       </label>
       <div class="adm-row">
@@ -188,7 +188,7 @@
       <h2 data-en="Send a message">Mitteilung senden</h2>
       <p class="adm-sub" data-en="Arrives as a notification on the phone (if allowed) and appears in the app the next time it is opened.">Kommt als Benachrichtigung aufs Handy (wenn erlaubt) und erscheint beim nächsten Öffnen in der App.</p>
       <form class="adm-form" id="ann-form" novalidate>
-        <input class="adm-input wide" id="ann-title" maxlength="80" placeholder="Titel, z. B. Neu bei Apex 🎉" data-en-placeholder="Title, e.g. New on Apex 🎉">
+        <input class="adm-input wide" id="ann-title" maxlength="80" placeholder="Titel, z. B. Neu bei ApeX 🎉" data-en-placeholder="Title, e.g. New on ApeX 🎉">
         <textarea class="adm-input wide" id="ann-body" maxlength="1000" rows="3" placeholder="Deine Nachricht …" data-en-placeholder="Your message …"></textarea>
         <div class="adm-target">
           <label><input type="radio" name="ann-target" value="all" checked> <span data-en="To everyone">An alle</span></label>

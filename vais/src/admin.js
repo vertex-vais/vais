@@ -339,7 +339,7 @@ admin.post('/alarms', adminOnly, wrap(async (req, res) => {
   res.json({ ok: true, on: !!req.body?.on });
 }));
 admin.post('/alarms/test', adminOnly, wrap(async (req, res) => {
-  await alarm(`test-${Date.now()}`, 'Test-Alarm', 'So sieht eine Warnung aus, wenn bei Apex etwas schiefläuft.');
+  await alarm(`test-${Date.now()}`, 'Test-Alarm', 'So sieht eine Warnung aus, wenn bei ApeX etwas schiefläuft.');
   res.json({ ok: true });
 }));
 

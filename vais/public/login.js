@@ -4,7 +4,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const STEPS = {
-  email:    { title: t('Willkommen bei Apex', 'Welcome to Apex'), sub: () => t('Die besten KI-Modelle an einem Ort. Kostenlos.', 'The best AI models in one place. For free.') },
+  email:    { title: t('Willkommen bei ApeX', 'Welcome to ApeX'), sub: () => t('Die besten KI-Modelle an einem Ort. Kostenlos.', 'The best AI models in one place. For free.') },
   login:    { title: t('Willkommen zurück', 'Welcome back'), sub: () => t('Melde dich mit deinem Passwort an.', 'Sign in with your password.') },
   register: { title: t('Konto erstellen', 'Create account'), sub: () => t('Wähle ein Passwort für dein neues Konto.', 'Choose a password for your new account.') },
   verify:   { title: t('Prüfe dein Postfach', 'Check your inbox'), sub: (e) => t(`Wir haben einen 6-stelligen Code an <strong>${e}</strong> gesendet.`, `We sent a 6-digit code to <strong>${e}</strong>.`) },
