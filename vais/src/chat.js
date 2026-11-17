@@ -22,6 +22,7 @@ import { getActiveProviderKey, noteProviderKeyFailure } from './providerKeys.js'
 import { pickAvailable, isBusy } from './models.js';
 import { generateImage, editImage, helperModel, complete, transcribe } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode, rankModels } from './models.js';
+import { extrasPrompt, cleanSuggestions, demoSuggestions } from './followups.js';
 
 const MAX_MESSAGES = 120;         // so viele Nachrichten nehmen wir an (ältere werden zusammengefasst)
 const MAX_CHARS = 20_000;         // pro Nachricht
@@ -837,9 +838,11 @@ chat.post('/extras', wrap(async (req, res) => {
   // Titel: beim ersten Mal immer; später nur, wenn das Thema deutlich wechselt (gleiche Anfrage, keine Extrakosten)
   const wantTitle = !row.renamed && !row.incognito;
   const firstTurn = turn === 0;
+  const imageMode = row.modality === 'image';
 
   if (demoMode) {
-    const s = t(['Erklär das genauer', 'Gib mir ein Beispiel', 'Fasse es kurz zusammen'], ['Explain that in more detail', 'Give me an example', 'Summarize it briefly']);
+    const demo = demoSuggestions(imageMode);
+    const s = t(demo.de, demo.en);
     const title = wantTitle && firstTurn ? question.split(/\s+/).slice(0, 4).join(' ').slice(0, 60) : undefined;
     if (title) await run('UPDATE chats SET title = ? WHERE id = ? AND renamed IS NULL', title, row.id);
     return res.json({ title, suggestions: s });
@@ -847,26 +850,12 @@ chat.post('/extras', wrap(async (req, res) => {
   const model = await helperModel();
   if (!model) return res.json({ suggestions: [] });
 
-  const imageMode = row.modality === 'image';
-  const prompt = [
-    'Antworte NUR mit JSON, ohne Erklärung, im Format {"title": "...", "suggestions": ["...", "...", "..."]}.',
-    !wantTitle ? '"title": leer lassen.'
-      : firstTurn ? '"title": ein kurzer, treffender Titel für diesen Chat (2–5 Wörter, keine Anführungszeichen, kein Punkt).'
-        : `"title": Der Chat heißt bisher „${String(row.title ?? '').slice(0, 80)}“. NUR wenn diese neue Frage ein klar anderes Thema hat, gib einen neuen kurzen Titel für das neue Thema (2–5 Wörter). Bei Nachfragen, Details oder demselben Thema: leer lassen.`,
-    imageMode
-      ? '"suggestions": 3 kurze Ideen, wie man das Bild abwandeln könnte (je max. 8 Wörter), als Bildbeschreibung formuliert.'
-      : '"suggestions": 3 kurze, unterschiedliche Folgefragen, die der Nutzer als Nächstes stellen könnte (je max. 10 Wörter), aus Sicht des Nutzers.',
-    'Schreibe in derselben Sprache wie die Frage des Nutzers.',
-    '',
-    `Frage des Nutzers: ${question.slice(0, 1500)}`,
-    answer ? `Antwort (Auszug): ${answer.slice(0, 2000)}` : '',
-  ].join('\n');
+  const prompt = extrasPrompt({ imageMode, wantTitle, firstTurn, currentTitle: row.title, question, answer });
   try {
     const msg = await complete({ model: model.id, messages: [{ role: 'user', content: prompt }] });
     const raw = String(msg.content ?? '').replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, '$1');
     const data = JSON.parse(raw);
-    const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : [])
-      .map((x) => String(x).replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+    const suggestions = cleanSuggestions(data.suggestions);
     let title;
     if (wantTitle && typeof data.title === 'string') {
       title = data.title.replace(/["„“”]/g, '').replace(/[.\s]+$/, '').replace(/\s+/g, ' ').trim().slice(0, 60);

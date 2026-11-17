@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { cleanSuggestions } from '../src/followups.js';
 
 const PORT = String(4100 + Math.floor(Math.random() * 800));
 const BASE = `http://localhost:${PORT}`;
@@ -660,6 +661,9 @@ test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
   const b = await c.json('/api/chat/extras', { chatId: start.data.id, turn: 0 });
   assert.equal(a.status, 200);
   assert.deepEqual(a.data, b.data);
+  assert.ok(a.data.suggestions.length >= 1);
+  assert.deepEqual(a.data.suggestions, cleanSuggestions(a.data.suggestions));
+  for (const s of a.data.suggestions) assert.doesNotMatch(s, /[?？]|\b(möchtest du|soll er|willst du)\b/i);
   // fremder Chat → nichts
   const other = await signUpTester('extras2@example.com');
   assert.equal((await other.json('/api/chat/extras', { chatId: start.data.id, turn: 0 })).status, 404);
