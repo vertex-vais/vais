@@ -7,7 +7,7 @@ import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { isAdmin, isStaff, inTestMode, isUnlimited, ADMIN_EMAILS } from './config.js';
 import { notifyUser } from './push.js';
-import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } from './models.js';
+import { describeModel, listModels, demoMode, keyRuntime, forgetModelCache } from './models.js';
 import { limitSettings, saveLimitSettings, LIMIT_FIELDS, costSettings, saveCostSettings, COST_FIELDS, usageMap, resetUsage, scaled } from './limits.js';
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
@@ -17,7 +17,7 @@ import { maintenance, forgetMaintenance } from './maintenance.js';
 import { listReports, actOnReport, openReportCount } from './reports.js';
 import { memory, healthList, runHealthCheck } from './stability.js';
 import { faqList, faqSave, faqRemove, topQuestions } from './faq.js';
-import { listProviderKeysPublic, listCursorKeysPublic, addProviderKey, addCursorKey, setProviderKeyEnabled, removeProviderKey, testProviderKey } from './providerKeys.js';
+import { listUnifiedKeys, listCursorKeysPublic, addProviderKey, addCursorKey, setProviderKeyEnabled, removeProviderKey, testProviderKey, testPlainKey } from './providerKeys.js';
 
 export const admin = Router();
 
@@ -277,60 +277,61 @@ admin.post('/reset-usage', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ── API-Schlüssel (werden nie im Klartext zurückgegeben) ──────────
-admin.get('/keys', adminOnly, wrap(async (req, res) => {
-  res.json({ providers: keyStatus() });
+// ── API-Keys: ein Bereich für alle Anbieter ─────────────────────
+// Gespeichert wird verschlüsselt (src/providerKeys.js), zurück gehen nur die letzten 4 Zeichen.
+// /keys ist der frühere Pfad des alten Bereichs „API-Schlüssel“ und zeigt jetzt auf dasselbe.
+// /cursor-keys bleibt als Alias (nur Cursor) für ältere Aufrufe.
+const providerList = (cursorOnly) => cursorOnly ? listCursorKeysPublic() : listUnifiedKeys(keyRuntime);
+const isCursorPath = (req) => /\/cursor-keys(\/|$)/.test(req.path);
+admin.get(['/provider-keys', '/keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
+  res.json(await providerList(isCursorPath(req)));
 }));
-admin.post('/keys', adminOnly, wrap(async (req, res) => {
-  const provider = String(req.body?.provider ?? '');
-  let id;
-  try { id = await addKey(provider, req.body?.key); } catch (err) { throw new HttpError(400, err.message); }
-  await logEvent('admin', null, `Schlüssel hinzugefügt: ${provider} ${id}`);
-  res.json({ ok: true, id, providers: keyStatus() });
-}));
-admin.post('/keys/remove', adminOnly, wrap(async (req, res) => {
-  const provider = String(req.body?.provider ?? '');
-  const id = String(req.body?.id ?? '');
-  try { await removeKey(provider, id); } catch (err) { throw new HttpError(400, err.message); }
-  await logEvent('admin', null, `Schlüssel entfernt: ${provider} ${id}`);
-  res.json({ ok: true, providers: keyStatus() });
-}));
-
-// ── API-Keys aller Anbieter (verschlüsselt, nie im Klartext zurück) ─
-const providerList = (cursorOnly) => cursorOnly ? listCursorKeysPublic() : listProviderKeysPublic();
-admin.get(['/provider-keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
-  res.json(await providerList(req.path.endsWith('/cursor-keys')));
-}));
-admin.post(['/provider-keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
-  const cursorOnly = req.path.endsWith('/cursor-keys');
+admin.post(['/provider-keys', '/keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
+  const cursorOnly = isCursorPath(req);
+  const provider = cursorOnly ? 'cursor' : String(req.body?.provider ?? '');
+  let warning = null;
+  // Vor dem Speichern testen: abgelehnte Schlüssel (401/403/404) werden nicht gespeichert.
+  // Ist der Anbieter gerade nicht erreichbar oder voll (429), wird trotzdem gespeichert, mit Hinweis.
+  if (!cursorOnly && req.body?.verify !== false) {
+    const key = String(req.body?.key ?? '').trim();
+    if (!/^[\x21-\x7e]{16,400}$/.test(key)) throw new HttpError(400, t('Das sieht nicht wie ein Schlüssel aus.', 'That does not look like a key.'));
+    let result;
+    try { result = await testPlainKey({ provider, key, baseUrl: req.body?.baseUrl }); } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+    if (!result.ok && [400, 401, 403, 404].includes(result.status)) {
+      throw new HttpError(400, t(`Der Schlüssel funktioniert nicht (Fehler ${result.status}) – bitte prüfen.`, `The key does not work (error ${result.status}) – please check it.`));
+    }
+    if (!result.ok) warning = result.status === 429
+      ? t('Gespeichert. Der Schlüssel ist gültig, aber gerade voll (429).', 'Saved. The key is valid but currently full (429).')
+      : t(`Gespeichert, aber der Test war nicht eindeutig (${result.status || 'keine Verbindung'}). Später mit „Testen“ prüfen.`, `Saved, but the test was inconclusive (${result.status || 'no connection'}). Check later with “Test”.`);
+  }
   let row;
   try {
     row = cursorOnly
       ? await addCursorKey(req.body?.label, req.body?.key)
-      : await addProviderKey({ provider: req.body?.provider, label: req.body?.label, key: req.body?.key, baseUrl: req.body?.baseUrl, model: req.body?.model });
+      : await addProviderKey({ provider, label: req.body?.label, key: req.body?.key, baseUrl: req.body?.baseUrl, model: req.body?.model });
   } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  forgetModelCache(row.provider ?? provider);
   await logEvent('admin', null, `API-Key hinzugefügt: ${row.provider ?? 'cursor'} ${row.label} ${row.masked}`);
-  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+  res.json({ ok: true, warning, added: { id: row.id, provider: row.provider ?? provider, masked: row.masked }, ...(await providerList(cursorOnly)) });
 }));
-admin.post(['/provider-keys/toggle', '/cursor-keys/toggle'], adminOnly, wrap(async (req, res) => {
-  const cursorOnly = req.path.includes('/cursor-keys/');
+admin.post(['/provider-keys/toggle', '/keys/toggle', '/cursor-keys/toggle'], adminOnly, wrap(async (req, res) => {
   try { await setProviderKeyEnabled(req.body?.id, req.body?.enabled); }
   catch (err) { throw new HttpError(err.status ?? 400, err.message); }
-  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+  forgetModelCache();
+  res.json({ ok: true, ...(await providerList(isCursorPath(req))) });
 }));
-admin.post(['/provider-keys/remove', '/cursor-keys/remove'], adminOnly, wrap(async (req, res) => {
-  const cursorOnly = req.path.includes('/cursor-keys/');
+admin.post(['/provider-keys/remove', '/keys/remove', '/cursor-keys/remove'], adminOnly, wrap(async (req, res) => {
   let row;
   try { row = await removeProviderKey(req.body?.id); }
   catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  forgetModelCache(row.provider);
   await logEvent('admin', null, `API-Key entfernt: ${row.provider} ${row.label} ${row.masked}`);
-  res.json({ ok: true, ...(await providerList(cursorOnly)) });
+  res.json({ ok: true, ...(await providerList(isCursorPath(req))) });
 }));
-admin.post(['/provider-keys/test', '/cursor-keys/test'], adminOnly, wrap(async (req, res) => {
-  const cursorOnly = req.path.includes('/cursor-keys/');
+admin.post(['/provider-keys/test', '/keys/test', '/cursor-keys/test'], adminOnly, wrap(async (req, res) => {
   try {
     const result = await testProviderKey(req.body?.id);
-    res.json({ ...result, ...(await providerList(cursorOnly)) });
+    res.json({ ...result, ...(await providerList(isCursorPath(req))) });
   } catch (err) {
     throw new HttpError(err.status ?? 400, err.message);
   }

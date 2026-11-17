@@ -483,7 +483,7 @@ $('#limits-form').addEventListener('submit', async (e) => {
   } catch (err) { toast(err.message); }
 });
 
-// ── API-Schlüssel ────────────────────────────────────────────────
+// ── API-Keys: Verbrauch pro Schlüssel ───────────────────────────
 // Verbrauch eines Schlüssels: eigene Zähler + Limits, die der Anbieter meldet
 const kfmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',')}k` : num(n));
 const soon = (ms) => (ms === null || ms === undefined ? '' : ms < 60_000 ? `${Math.ceil(ms / 1000)} s` : ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1).replace('.', ',')} h`);
@@ -500,50 +500,6 @@ function keyUsageHtml(u) {
     ${L ? bar(L.reqLeft, L.reqLimit, t('Anfragen pro Tag', 'Requests per day'), L.reqReset) + bar(L.tokLeft, L.tokLimit, t('Tokens pro Minute', 'Tokens per minute'), L.tokReset) : ''}
   </div>`;
 }
-function renderKeys(providers) {
-  const STATE = { ok: t('frei', 'free'), partly: t('teilweise voll', 'partly full'), full: t('voll', 'full') };
-  $('#keys').innerHTML = providers.map((p) => `
-    <div class="adm-keys">
-      <p class="adm-keys-head"><b>${esc(p.label)}</b><small>${p.keys.length ? `${p.keys.length} ${p.keys.length === 1 ? t('Schlüssel', 'key') : t('Schlüssel', 'keys')}` : t('kein Schlüssel', 'no key')}</small></p>
-      ${p.keys.length ? `<ul>${p.keys.map((k, i) => `
-        <li><span class="adm-key-role">${t('Nr.', 'No.')} ${i + 1}</span><code>${esc(k.id)}</code>
-          <span class="adm-key-state ${k.state}">${STATE[k.state]}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>
-          <small>${k.source === 'render' ? 'Render' : k.source === 'panel' ? 'API-Keys' : 'Admin'}</small>
-          ${k.source === 'admin' ? `<button class="adm-link danger" data-rm-key="${esc(k.id)}" data-provider="${p.provider}">${t('Entfernen', 'Remove')}</button>` : ''}
-          ${keyUsageHtml(k.usage)}
-        </li>`).join('')}</ul>` : ''}
-    </div>`).join('');
-  const sel = $('#key-provider');
-  if (!sel.options.length) sel.innerHTML = providers.map((p) => `<option value="${p.provider}"${p.provider === 'groq' ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
-}
-async function loadKeys() {
-  try { renderKeys((await api('keys')).providers); } catch (err) { toast(err.message); }
-}
-$('#key-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const key = $('#key-value').value.trim();
-  if (!key) return toast(t('Bitte einen Schlüssel einfügen.', 'Please paste a key.'));
-  const btn = e.currentTarget.querySelector('button');
-  btn.disabled = true;
-  btn.textContent = t('Teste …', 'Testing …');
-  try {
-    const data = await api('keys', { provider: $('#key-provider').value, key });
-    $('#key-value').value = '';
-    renderKeys(data.providers);
-    toast(t('Schlüssel funktioniert und ist gespeichert ✓', 'Key works and is saved ✓'));
-  } catch (err) {
-    toast(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = t('Hinzufügen', 'Add');
-  }
-});
-$('#keys').addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-rm-key]');
-  if (!btn || !confirm(t(`Schlüssel ${btn.dataset.rmKey} entfernen?`, `Remove key ${btn.dataset.rmKey}?`))) return;
-  try { renderKeys((await api('keys/remove', { provider: btn.dataset.provider, id: btn.dataset.rmKey })).providers); toast(t('Entfernt.', 'Removed.')); } catch (err) { toast(err.message); }
-});
-
 // ── Mitteilungen ─────────────────────────────────────────────────
 const chosen = new Map(); // id → E-Mail
 function paintChosen() {
@@ -636,43 +592,56 @@ $('#reset-board').addEventListener('click', async () => {
 $('#undo-board').addEventListener('click', async () => {
   try { boardState((await api('reset-board', { undo: true })).boardResetAt); toast(t('Alte Stimmen zählen wieder.', 'Old votes count again.')); load(); } catch (err) { toast(err.message); }
 });
-// ── API-Keys (alle Anbieter, verschlüsselt) ─────────────────────
+// ── API-Keys (ein Bereich für alle Anbieter, verschlüsselt) ─────
 const pkName = (p) => (document.documentElement.dataset.lang === 'en' ? p.labelEn : p.label);
-function renderProviderKeys(data) {
-  const warn = $('#pk-warn');
-  if (warn) warn.hidden = data.encryption === 'env';
-  const sel = $('#pk-provider');
-  if (sel && data.providers && sel.options.length !== data.providers.length) {
-    const current = sel.value;
-    sel.innerHTML = data.providers.map((p) => `<option value="${esc(p.id)}">${esc(pkName(p))}${p.adminOnly ? ` (${t('nur Admin', 'admin only')})` : ''}</option>`).join('');
-    if (current) sel.value = current;
-  }
-  const envNames = (data.providers ?? []).filter((p) => p.envConfigured).map((p) => p.env);
-  $('#pk-env').textContent = envNames.length
-    ? t(`Ersatz aus der Umgebung, Werte werden nicht angezeigt: ${envNames.join(', ')}`, `Environment fallback, values are not shown: ${envNames.join(', ')}`)
-    : '';
-  const custom = $('#pk-provider')?.value === 'custom';
-  $('#pk-extra').hidden = !custom;
-  const nvidia = $('#pk-provider')?.value === 'nvidia';
-  $('#pk-nvidia').hidden = !nvidia;
-  $('#pk-keys').innerHTML = data.keys.length ? data.keys.map((k) => `
+const PK_STATE = () => ({ ok: t('frei', 'free'), partly: t('teilweise voll', 'partly full'), full: t('voll', 'full') });
+function pkKeyRow(k) {
+  const st = PK_STATE();
+  const saved = k.source === 'saved';
+  return `
     <li class="ck-row">
-      <span class="ck-label"><b>${esc(document.documentElement.dataset.lang === 'en' ? k.providerLabelEn : k.providerLabel)}</b> <span>${esc(k.label)}</span> <code>${esc(k.masked)}</code>
-        ${k.adminOnly ? `<small class="ck-badge">${t('nur Admin', 'admin only')}</small>` : ''}
+      <span class="ck-label"><span>${esc(k.label)}</span> <code>${esc(k.masked)}</code>
+        <small class="ck-badge">${saved ? t('gespeichert', 'saved') : 'Render'}</small>
+        ${saved && !k.enabled ? '' : `<span class="adm-key-state ${k.state}">${st[k.state] ?? ''}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>`}
         ${k.baseUrl ? `<small class="muted">${esc(k.baseUrl)} · ${esc(k.model || '')}</small>` : ''}
-        ${k.readable ? '' : `<small class="ck-bad">${t('nicht lesbar', 'unreadable')}</small>`}</span>
+        ${k.readable ? '' : `<small class="ck-bad">${t('nicht lesbar – bitte neu eintragen', 'unreadable – please add again')}</small>`}</span>
+      ${saved ? `
       <label class="ck-on"><input type="checkbox" data-pk-on="${k.id}" ${k.enabled ? 'checked' : ''} aria-label="${t('Aktiv', 'On')}"> <span>${k.enabled ? t('aktiv', 'on') : t('aus', 'off')}</span></label>
       <button type="button" class="adm-btn small" data-pk-test="${k.id}">${t('Testen', 'Test')}</button>
       <button type="button" class="adm-btn small danger" data-pk-del="${k.id}">${t('Löschen', 'Delete')}</button>
-      <span class="ck-result" data-pk-result="${k.id}"></span>
-    </li>`).join('') : `<li class="adm-empty">${t('Noch kein Schlüssel.', 'No key yet.')}</li>`;
+      <span class="ck-result" data-pk-result="${k.id}"></span>` : `<small class="muted">${t('in Render ändern', 'change in Render')}</small>`}
+      ${k.tracked ? keyUsageHtml(k.usage) : ''}
+    </li>`;
+}
+function renderProviderKeys(data) {
+  const warn = $('#pk-warn');
+  if (warn) warn.hidden = data.encryption === 'env';
+  const providers = data.providers ?? [];
+  const sel = $('#pk-provider');
+  const addable = providers.filter((p) => !p.retired);
+  if (sel && sel.options.length !== addable.length) {
+    const current = sel.value || 'cursor';
+    sel.innerHTML = addable.map((p) => `<option value="${esc(p.id)}">${esc(pkName(p))}${p.adminOnly ? ` (${t('nur Admin', 'admin only')})` : ''}</option>`).join('');
+    sel.value = current;
+  }
+  $('#pk-extra').hidden = sel?.value !== 'custom';
+  $('#pk-nvidia').hidden = sel?.value !== 'nvidia';
+  // Eingestellte Anbieter nur zeigen, solange noch ein alter Schlüssel da ist (zum Löschen)
+  const shown = providers.filter((p) => !p.retired || p.keys.length);
+  $('#pk-keys').innerHTML = shown.map((p) => `
+    <div class="adm-keys">
+      <p class="adm-keys-head"><b>${esc(pkName(p))}</b>
+        <small>${p.keys.length ? `${p.keys.length} ${p.keys.length === 1 ? t('Schlüssel', 'key') : t('Schlüssel', 'keys')}` : t('kein Schlüssel', 'no key')}</small>
+        ${p.adminOnly ? `<small class="ck-badge">${t('nur Admin', 'admin only')}</small>` : ''}
+        ${p.retired ? `<small class="ck-badge ck-bad">${esc(document.documentElement.dataset.lang === 'en' ? p.retiredNoteEn : p.retiredNote)}</small>` : ''}</p>
+      ${p.keys.length ? `<ul class="ck-list">${p.keys.map(pkKeyRow).join('')}</ul>` : ''}
+    </div>`).join('');
 }
 async function loadProviderKeys() {
   try { renderProviderKeys(await api('provider-keys')); } catch (err) { toast(err.message); }
 }
 $('#pk-provider')?.addEventListener('change', () => {
-  const custom = $('#pk-provider').value === 'custom';
-  $('#pk-extra').hidden = !custom;
+  $('#pk-extra').hidden = $('#pk-provider').value !== 'custom';
   $('#pk-nvidia').hidden = $('#pk-provider').value !== 'nvidia';
 });
 $('#pk-form')?.addEventListener('submit', async (e) => {
@@ -682,16 +651,18 @@ $('#pk-form')?.addEventListener('submit', async (e) => {
   const key = $('#pk-value').value.trim();
   const baseUrl = $('#pk-base').value.trim();
   const model = $('#pk-model').value.trim();
-  if (!label || !key) return toast(t('Bezeichnung und Schlüssel eintragen.', 'Enter a label and a key.'));
+  if (!key) return toast(t('Bitte einen Schlüssel einfügen.', 'Please paste a key.'));
   if (provider === 'custom' && (!baseUrl || !model)) return toast(t('Basis-URL und Modellname eintragen.', 'Enter a base URL and a model name.'));
   const btn = e.currentTarget.querySelector('button');
   btn.disabled = true;
+  btn.textContent = t('Teste …', 'Testing …');
   try {
-    renderProviderKeys(await api('provider-keys', { provider, label, key, baseUrl, model }));
+    const data = await api('provider-keys', { provider, label, key, baseUrl, model });
+    renderProviderKeys(data);
     $('#pk-label').value = '';
     $('#pk-value').value = '';
-    toast(t('Gespeichert. Angezeigt werden nur die letzten 4 Zeichen.', 'Saved. Only the last 4 characters are shown.'));
-  } catch (err) { toast(err.message); } finally { btn.disabled = false; }
+    toast(data.warning || t('Schlüssel funktioniert und ist gespeichert ✓', 'Key works and is saved ✓'));
+  } catch (err) { toast(err.message); } finally { btn.disabled = false; btn.textContent = t('Hinzufügen', 'Add'); }
 });
 $('#pk-keys')?.addEventListener('change', async (e) => {
   const box = e.target.closest('[data-pk-on]');
@@ -728,7 +699,7 @@ $('#pk-keys')?.addEventListener('click', async (e) => {
   }
 });
 
-$('#refresh').addEventListener('click', () => { load(); loadUsers(); if (role === 'admin') { loadKeys(); loadProviderKeys(); } });
+$('#refresh').addEventListener('click', () => { load(); loadUsers(); if (role === 'admin') loadProviderKeys(); });
 
 translateDom();
 // Erst die Rolle kennen (Admin oder Mod), dann den Rest laden
@@ -736,5 +707,5 @@ load().then(() => {
   loadUsers();
   loadSitesAdmin();
   loadFeedback();
-  if (role === 'admin') { loadLimits(); loadKeys(); loadProviderKeys(); }
+  if (role === 'admin') { loadLimits(); loadProviderKeys(); }
 });

@@ -250,4 +250,18 @@ test('Cursor-Keys nur für Admins, Antwort ohne den Schlüssel', async () => {
   assert.equal(removed.status, 200);
   assert.equal(removed.data.keys.length, 0);
   assert.ok(!JSON.stringify(removed.data).includes(KEY_A));
+
+  // Ein Bereich: /keys (früherer Pfad) liefert dieselbe Liste aller Anbieter wie /provider-keys
+  const unified = await admin.call('/api/admin/keys');
+  assert.equal(unified.status, 200);
+  const ids = unified.data.providers.map((p) => p.id);
+  for (const id of ['cursor', 'groq', 'openrouter', 'gemini', 'nvidia', 'custom', 'github']) assert.ok(ids.includes(id), id);
+  assert.ok(unified.data.providers.every((p) => Array.isArray(p.keys)));
+  assert.deepEqual(Object.keys((await admin.call('/api/admin/provider-keys')).data), Object.keys(unified.data));
+  // Test vor dem Speichern: ungültige Eingaben werden gar nicht erst gespeichert
+  const bad = await admin.call('/api/admin/provider-keys', { provider: 'custom', key: 'sk-custom-key-1234567890abcd', baseUrl: 'http://example.com/v1', model: 'm' });
+  assert.equal(bad.status, 400);
+  const retired = await admin.call('/api/admin/provider-keys', { provider: 'github', key: 'ghp_retired_token_1234567890abcd', verify: false });
+  assert.equal(retired.status, 400);
+  assert.match(retired.data.error ?? JSON.stringify(retired.data), /eingestellt/);
 });

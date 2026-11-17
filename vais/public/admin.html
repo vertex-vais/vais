@@ -165,34 +165,22 @@
       </form>
     </section>
 
-    <section class="adm-card" data-admin-only>
-      <h2 data-en="API keys">API-Schlüssel</h2>
-      <p class="adm-sub" data-en="Usage of the chat keys. Keys you save under API keys are used first; these environment variables are only the fallback. A full key is skipped until it is free again.">Verbrauch der Chat-Schlüssel. Was du unter API-Keys speicherst, wird zuerst benutzt; diese Umgebungsvariablen sind nur der Ersatz. Ein voller Schlüssel wird übersprungen, bis er wieder frei ist.</p>
-      <div id="keys"></div>
-      <form class="adm-form adm-keyform" id="key-form" novalidate>
-        <select class="adm-input" id="key-provider" aria-label="Anbieter" data-en-aria-label="Provider"></select>
-        <input class="adm-input" id="key-value" type="password" autocomplete="off" spellcheck="false" placeholder="Neuen Schlüssel einfügen" data-en-placeholder="Paste new key" aria-label="Schlüssel" data-en-aria-label="Key">
-        <button class="adm-btn primary" type="submit" data-en="Add">Hinzufügen</button>
-      </form>
-      <p class="adm-hint" data-en="The key is tested before it is saved.">Der Schlüssel wird vor dem Speichern getestet.</p>
-    </section>
-
     <section class="adm-card" data-admin-only id="provider-keys-card">
       <h2>API-Keys</h2>
-      <p class="adm-sub" data-en="Add keys for every provider. They are stored encrypted and only the last 4 characters are shown. Enabled keys of one provider are used in turn and take priority. Environment variables are only the fallback. A key that just failed with 401 or 429 is skipped for a while. NVIDIA’s free tier is admin-only and is never used for normal users.">Schlüssel für alle Anbieter. Sie werden verschlüsselt gespeichert und nur die letzten 4 Zeichen angezeigt. Aktivierte Schlüssel eines Anbieters werden reihum benutzt und haben Vorrang. Umgebungsvariablen sind nur der Ersatz. Ein Schlüssel mit Fehler 401 oder 429 wird eine Weile übersprungen. NVIDIA (kostenloses Kontingent) ist nur für Admins und wird nie für normale Nutzer verwendet.</p>
+      <p class="adm-sub" data-en="All keys of all providers in one place. Saved keys are stored encrypted and only the last 4 characters are shown. Enabled saved keys are used in turn and take priority; keys from Render (environment variables) are only the fallback. A full or rejected key is skipped until it is free again. NVIDIA’s free tier is admin-only and is never used for normal users.">Alle Schlüssel aller Anbieter an einem Ort. Gespeicherte Schlüssel liegen verschlüsselt, angezeigt werden nur die letzten 4 Zeichen. Aktivierte gespeicherte Schlüssel werden reihum benutzt und haben Vorrang, Schlüssel aus Render (Umgebungsvariablen) sind nur der Ersatz. Ein voller oder abgelehnter Schlüssel wird übersprungen, bis er wieder frei ist. NVIDIA (kostenloses Kontingent) ist nur für Admins und wird nie für normale Nutzer verwendet.</p>
       <p class="adm-hint" id="pk-warn" hidden data-en="KEY_ENCRYPTION_SECRET is not set on the server. Set it before saving keys here.">KEY_ENCRYPTION_SECRET ist auf dem Server nicht gesetzt. Bitte setzen, bevor hier Schlüssel gespeichert werden.</p>
-      <p class="adm-sub" id="pk-env"></p>
-      <ul class="ck-list" id="pk-keys"></ul>
+      <div id="pk-keys"></div>
       <form class="adm-form adm-provider-form" id="pk-form" novalidate>
         <select class="adm-input" id="pk-provider" aria-label="Anbieter" data-en-aria-label="Provider"></select>
-        <input class="adm-input" id="pk-label" maxlength="40" autocomplete="off" placeholder="Bezeichnung" data-en-placeholder="Label" aria-label="Bezeichnung" data-en-aria-label="Label">
-        <input class="adm-input" id="pk-value" type="password" autocomplete="off" spellcheck="false" placeholder="Schlüssel einfügen" data-en-placeholder="Paste key" aria-label="Schlüssel" data-en-aria-label="Key">
+        <input class="adm-input" id="pk-label" maxlength="40" autocomplete="off" placeholder="Bezeichnung (optional)" data-en-placeholder="Label (optional)" aria-label="Bezeichnung" data-en-aria-label="Label">
+        <input class="adm-input" id="pk-value" type="password" autocomplete="off" spellcheck="false" placeholder="Neuen Schlüssel einfügen" data-en-placeholder="Paste new key" aria-label="Schlüssel" data-en-aria-label="Key">
         <button class="adm-btn primary" type="submit" data-en="Add">Hinzufügen</button>
         <div class="pk-extra" id="pk-extra" hidden>
           <input class="adm-input" id="pk-base" autocomplete="off" spellcheck="false" placeholder="Basis-URL, z. B. https://api.example.com/v1" data-en-placeholder="Base URL, e.g. https://api.example.com/v1" aria-label="Basis-URL" data-en-aria-label="Base URL">
           <input class="adm-input" id="pk-model" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Modellname" data-en-placeholder="Model name" aria-label="Modellname" data-en-aria-label="Model name">
         </div>
       </form>
+      <p class="adm-hint" data-en="The key is tested before it is saved.">Der Schlüssel wird vor dem Speichern getestet.</p>
       <p class="adm-hint" id="pk-nvidia" hidden data-en="NVIDIA’s free tier forbids production use. These keys are never used for normal users’ requests.">Das kostenlose NVIDIA-Kontingent verbietet den Produktiveinsatz. Diese Schlüssel werden nie für Anfragen normaler Nutzer benutzt.</p>
     </section>
 

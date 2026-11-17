@@ -15,21 +15,23 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync }
 import { all, get, run, getSetting, setSetting } from './db.js';
 import { t } from './i18n.js';
 
+// Reihenfolge = Reihenfolge im Admin-Bereich
 export const CATALOG = {
   cursor: { label: 'Cursor', labelEn: 'Cursor', env: ['CURSOR_API_KEY'], test: { type: 'basic-get', url: 'https://api.cursor.com/v0/me' } },
-  nvidia: { label: 'NVIDIA NIM', labelEn: 'NVIDIA NIM', env: ['NVIDIA_API_KEY'], adminOnly: true, test: { type: 'bearer-get', url: 'https://integrate.api.nvidia.com/v1/models' } },
   groq: { label: 'Groq', labelEn: 'Groq', env: ['GROQ_API_KEY'], test: { type: 'bearer-get', url: 'https://api.groq.com/openai/v1/models' } },
-  gemini: { label: 'Google Gemini', labelEn: 'Google Gemini', env: ['GEMINI_API_KEY'], test: { type: 'gemini' } },
   openrouter: { label: 'OpenRouter', labelEn: 'OpenRouter', env: ['OPENROUTER_API_KEY'], test: { type: 'bearer-get', url: 'https://openrouter.ai/api/v1/key' } },
+  gemini: { label: 'Google AI Studio (Gemini)', labelEn: 'Google AI Studio (Gemini)', env: ['GEMINI_API_KEY'], test: { type: 'gemini' } },
   cerebras: { label: 'Cerebras', labelEn: 'Cerebras', env: ['CEREBRAS_API_KEY'], test: { type: 'bearer-get', url: 'https://api.cerebras.ai/v1/models' } },
   mistral: { label: 'Mistral', labelEn: 'Mistral', env: ['MISTRAL_API_KEY'], test: { type: 'bearer-get', url: 'https://api.mistral.ai/v1/models' } },
-  together: { label: 'Together', labelEn: 'Together', env: ['TOGETHER_API_KEY'], test: { type: 'bearer-get', url: 'https://api.together.xyz/v1/models' } },
-  pollinations: { label: 'Pollinations', labelEn: 'Pollinations', env: ['POLLINATIONS_API_KEY'], test: { type: 'bearer-get', url: 'https://gen.pollinations.ai/image/models' } },
-  tavily: { label: 'Tavily', labelEn: 'Tavily', env: ['TAVILY_API_KEY'], test: { type: 'tavily' } },
-  exa: { label: 'Exa', labelEn: 'Exa', env: ['EXA_API_KEY'], test: { type: 'exa' } },
-  jina: { label: 'Jina', labelEn: 'Jina', env: ['JINA_API_KEY'], test: { type: 'bearer-get', url: 'https://s.jina.ai/?q=ping', headers: { Accept: 'application/json', 'X-Respond-With': 'no-content' } } },
-  github: { label: 'GitHub Models', labelEn: 'GitHub Models', env: ['GITHUB_MODELS_TOKEN'], test: { type: 'bearer-get', url: 'https://models.github.ai/inference/models' } },
+  nvidia: { label: 'NVIDIA NIM', labelEn: 'NVIDIA NIM', env: ['NVIDIA_API_KEY'], adminOnly: true, test: { type: 'bearer-get', url: 'https://integrate.api.nvidia.com/v1/models' } },
   custom: { label: 'Benutzerdefiniert (OpenAI-kompatibel)', labelEn: 'Custom (OpenAI-compatible)', env: ['CUSTOM_OPENAI_API_KEY'], needsEndpoint: true, test: { type: 'custom' } },
+  pollinations: { label: 'Pollinations (Bilder)', labelEn: 'Pollinations (images)', env: ['POLLINATIONS_API_KEY'], test: { type: 'bearer-get', url: 'https://gen.pollinations.ai/image/models' } },
+  together: { label: 'Together', labelEn: 'Together', env: ['TOGETHER_API_KEY'], test: { type: 'bearer-get', url: 'https://api.together.xyz/v1/models' } },
+  tavily: { label: 'Tavily (Websuche)', labelEn: 'Tavily (web search)', env: ['TAVILY_API_KEY'], test: { type: 'tavily' } },
+  exa: { label: 'Exa (Websuche)', labelEn: 'Exa (web search)', env: ['EXA_API_KEY'], test: { type: 'exa' } },
+  jina: { label: 'Jina (Websuche)', labelEn: 'Jina (web search)', env: ['JINA_API_KEY'], test: { type: 'bearer-get', url: 'https://s.jina.ai/?q=ping', headers: { Accept: 'application/json', 'X-Respond-With': 'no-content' } } },
+  // GitHub Models wurde im Juli 2026 eingestellt. Bleibt nur sichtbar, damit alte Schlüssel gelöscht werden können.
+  github: { label: 'GitHub Models', labelEn: 'GitHub Models', env: ['GITHUB_MODELS_TOKEN'], retired: true, retiredNote: 'eingestellt (Juli 2026)', retiredNoteEn: 'retired (July 2026)', test: { type: 'bearer-get', url: 'https://models.github.ai/inference/models' } },
 };
 
 export const CURSOR_COOLDOWN_MS = { 401: 10 * 60 * 1000, 429: 60 * 1000 };
@@ -137,6 +139,9 @@ export function catalogPublic() {
     labelEn: spec.labelEn,
     adminOnly: !!spec.adminOnly,
     needsEndpoint: !!spec.needsEndpoint,
+    retired: !!spec.retired,
+    retiredNote: spec.retired ? spec.retiredNote : null,
+    retiredNoteEn: spec.retired ? spec.retiredNoteEn : null,
     env: spec.env[0],
     envConfigured: envValues(spec.env).length > 0,
   }));
@@ -210,9 +215,10 @@ export async function listProviderKeysPublic() {
 export async function addProviderKey({ provider, label: labelRaw, key: keyRaw, baseUrl, model } = {}) {
   const spec = CATALOG[provider];
   if (!spec) throw fail(t('Unbekannter Anbieter.', 'Unknown provider.'));
-  const label = String(labelRaw ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (spec.retired) throw fail(t(`${spec.label} wurde ${spec.retiredNote} – neue Schlüssel sind nicht mehr möglich.`, `${spec.labelEn} was ${spec.retiredNoteEn} – new keys are no longer possible.`));
   const key = String(keyRaw ?? '').trim();
-  if (!label) throw fail(t('Bitte eine Bezeichnung eintragen.', 'Please enter a label.'));
+  let label = String(labelRaw ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!label) label = `${spec.label.replace(/\s*\(.*\)$/, '')} ••••${key.slice(-4)}`.slice(0, 40);
   if (label.length < 2) throw fail(t('Die Bezeichnung ist zu kurz.', 'The label is too short.'));
   if (!/^[\x21-\x7e]{16,400}$/.test(key)) throw fail(t('Das sieht nicht wie ein Schlüssel aus.', 'That does not look like a key.'));
   let base = null;
@@ -374,37 +380,129 @@ export async function testProviderKey(idRaw, fetchImpl = globalThis.fetch) {
   return { ok: false, status: res.status, message: t(`Fehler (${res.status})`, `Error (${res.status})`) };
 }
 
-// Ältere Klartext-Schlüssel aus der Einstellung api_keys einmal verschlüsselt übernehmen.
-async function migrateLegacy() {
-  if (await getSetting('provider_keys_migrated', null)) return;
+// Ältere Schlüssel übernehmen:
+// 1. Tabelle cursor_api_keys (schon verschlüsselt, PR #1) – einmalig.
+// 2. Einstellung api_keys: der frühere Bereich „API-Schlüssel“ hat Schlüssel im KLARTEXT als JSON
+//    ({ groq: ['gsk_…'], … }) gespeichert. Bei jedem Start wird übernommen, was dort noch steht,
+//    verschlüsselt gespeichert und danach aus der Einstellung gelöscht. Ein Schlüssel, der nicht
+//    übernommen werden konnte, bleibt stehen (nichts geht verloren) und wird beim nächsten Start erneut versucht.
+const LEGACY_LABEL = 'Übernommen';
+export async function migrateLegacy() {
+  if (!(await getSetting('provider_keys_migrated', null))) {
+    try {
+      const old = await all('SELECT label, secret, last4, enabled, created_at FROM cursor_api_keys');
+      for (const r of old) {
+        const plain = decryptSecret(r.secret);
+        if (!plain) continue;
+        const keyHash = hashKey('cursor', plain);
+        if (await get('SELECT id FROM provider_api_keys WHERE provider = ? AND key_hash = ?', 'cursor', keyHash)) continue;
+        await run(
+          'INSERT INTO provider_api_keys (provider, label, secret, key_hash, last4, enabled, base_url, model_name, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)',
+          'cursor', r.label, r.secret, keyHash, r.last4, Number(r.enabled) ? 1 : 0, Number(r.created_at) || Date.now(),
+        );
+      }
+    } catch { /* alte Tabelle gibt es nicht */ }
+    await setSetting('provider_keys_migrated', '1');
+  }
   let parsed = {};
   try { parsed = JSON.parse(await getSetting('api_keys', '{}') || '{}') || {}; } catch { parsed = {}; }
-  try {
-    const old = await all('SELECT label, secret, last4, enabled, created_at FROM cursor_api_keys');
-    for (const r of old) {
-      const plain = decryptSecret(r.secret);
-      if (!plain) continue;
-      const keyHash = hashKey('cursor', plain);
-      if (await get('SELECT id FROM provider_api_keys WHERE provider = ? AND key_hash = ?', 'cursor', keyHash)) continue;
-      await run(
-        'INSERT INTO provider_api_keys (provider, label, secret, key_hash, last4, enabled, base_url, model_name, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)',
-        'cursor', r.label, r.secret, keyHash, r.last4, Number(r.enabled) ? 1 : 0, Number(r.created_at) || Date.now(),
-      );
-    }
-  } catch { /* alte Tabelle gibt es nicht */ }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) return { moved: 0, kept: 0 };
+  const keep = {};
+  let moved = 0;
   for (const [provider, keys] of Object.entries(parsed)) {
-    if (!CATALOG[provider] || !Array.isArray(keys)) continue;
-    for (const key of keys) {
-      if (!/^[\x21-\x7e]{16,400}$/.test(String(key ?? ''))) continue;
-      try { await addProviderKey({ provider, label: 'Bisheriger Schlüssel', key: String(key) }); } catch { /* schon da */ }
+    if (!Array.isArray(keys)) continue;
+    for (const raw of keys) {
+      const key = String(raw ?? '').trim();
+      if (!CATALOG[provider] || !/^[\x21-\x7e]{16,400}$/.test(key)) continue; // unbrauchbar → verwerfen
+      const keyHash = hashKey(provider, key);
+      try {
+        if (!(await get('SELECT id FROM provider_api_keys WHERE provider = ? AND key_hash = ?', provider, keyHash))) {
+          const secret = encryptSecret(key);
+          if (decryptSecret(secret) !== key) throw new Error('Verschlüsselung prüft nicht');
+          await run(
+            'INSERT INTO provider_api_keys (provider, label, secret, key_hash, last4, enabled, base_url, model_name, created_at) VALUES (?, ?, ?, ?, ?, 1, NULL, NULL, ?)',
+            provider, LEGACY_LABEL, secret, keyHash, maskKey(key).last4, Date.now(),
+          );
+        }
+        moved++;
+      } catch {
+        (keep[provider] ??= []).push(key);
+      }
     }
   }
-  await setSetting('provider_keys_migrated', '1');
-  if (Object.keys(parsed).length) await setSetting('api_keys', '{}');
+  const kept = Object.values(keep).reduce((n, l) => n + l.length, 0);
+  await setSetting('api_keys', JSON.stringify(keep));
+  if (moved) {
+    await refreshKeyCache();
+    console.log(`API-Keys: ${moved} ältere Schlüssel verschlüsselt übernommen${kept ? `, ${kept} noch offen` : ''}.`);
+  }
+  return { moved, kept };
 }
 
 try { await migrateLegacy(); } catch (err) { console.error('API-Keys übernehmen fehlgeschlagen:', err.message); }
 await refreshKeyCache();
+
+// Ein Schlüssel ohne Speichern testen (für „vor dem Speichern testen“). Liefert nie den Schlüssel zurück.
+export async function testPlainKey({ provider, key, baseUrl } = {}, fetchImpl = globalThis.fetch) {
+  if (!CATALOG[provider]) throw fail(t('Unbekannter Anbieter.', 'Unknown provider.'));
+  const row = { provider, base_url: provider === 'custom' ? endpointOf(baseUrl) : null };
+  try {
+    const res = await testRequest(row, String(key ?? '').trim(), fetchImpl);
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    if (err?.status === 400) throw err;
+    return { ok: false, status: 0 };
+  }
+}
+
+// Ein Bereich für alles: pro Anbieter die gespeicherten Schlüssel und die aus der Umgebung (Render),
+// jeweils nur mit den letzten 4 Zeichen. runtime(provider, key) liefert Zustand und Verbrauch
+// (kommt aus models.js; der Schlüssel selbst verlässt den Server nie).
+export async function listUnifiedKeys(runtime = () => ({})) {
+  const rows = await all('SELECT id, provider, label, secret, last4, enabled, base_url, model_name, created_at FROM provider_api_keys ORDER BY provider, id');
+  const now = Date.now();
+  const flat = [];
+  const providers = catalogPublic().map((p) => {
+    const spec = CATALOG[p.id];
+    const saved = rows.filter((r) => r.provider === p.id).map((r) => {
+      const plain = decryptSecret(r.secret);
+      const base = rowPublic(r, plain !== null);
+      const rt = plain ? runtime(p.id, plain) ?? {} : {};
+      const paused = COOLDOWNS.get(Number(r.id)) ?? 0;
+      const out = {
+        ...base,
+        source: 'saved',
+        state: paused > now ? 'full' : rt.state ?? 'ok',
+        until: paused > now ? Math.max(paused, rt.until ?? 0) : rt.until ?? null,
+        usage: rt.usage ?? null,
+        tracked: !!rt.tracked,
+      };
+      flat.push(out);
+      return out;
+    });
+    const savedPlain = new Set(cachedKeys(p.id).map((k) => k.key));
+    const env = envValues(spec.env).filter((k) => !savedPlain.has(k)).map((k, i) => {
+      const rt = runtime(p.id, k) ?? {};
+      const paused = ENV_COOLDOWNS.get(`${p.id}:${k}`) ?? 0;
+      return {
+        id: null,
+        provider: p.id,
+        source: 'env',
+        label: i ? `${spec.env[0]} (${i + 1})` : spec.env[0],
+        masked: `••••${maskKey(k).last4}`,
+        enabled: true,
+        readable: true,
+        adminOnly: !!spec.adminOnly,
+        state: paused > now ? 'full' : rt.state ?? 'ok',
+        until: paused > now ? Math.max(paused, rt.until ?? 0) : rt.until ?? null,
+        usage: rt.usage ?? null,
+        tracked: !!rt.tracked,
+      };
+    });
+    return { ...p, keys: [...saved, ...env] };
+  });
+  return { providers, keys: flat, encryption: encryptionSource() };
+}
 
 // Cursor-Aliase, damit bestehende Aufrufe gleich bleiben.
 export const listCursorKeysPublic = async () => {

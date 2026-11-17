@@ -18,16 +18,13 @@ const IDLE_TIMEOUT = 75_000; // so lange darf ein Modell bis zum ersten Lebensze
 const GAP_TIMEOUT = 40_000; // so lange darf es mitten in der Antwort schweigen (danach: Selbstheilung)
 const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
-// Schlüssel: pro Anbieter mehrere möglich – aus Render (z. B. GROQ_API_KEY, auch mit Komma getrennt,
-// sowie GROQ_API_KEY_2 … GROQ_API_KEY_9) und zusätzlich im Admin-Bereich eingetragene.
-// Ist ein Schlüssel voll, springt automatisch der nächste ein.
+// Schlüssel: pro Anbieter mehrere möglich – gespeichert im Admin-Bereich unter „API-Keys“
+// (verschlüsselt, src/providerKeys.js) und als Ersatz aus Render (z. B. GROQ_API_KEY, auch mit Komma
+// getrennt, sowie GROQ_API_KEY_2 … GROQ_API_KEY_9). Ist ein Schlüssel voll, springt der nächste ein.
 function envKeys(name) {
   const raw = [process.env[name], ...Array.from({ length: 8 }, (_, i) => process.env[`${name}_${i + 2}`])];
   return [...new Set(raw.flatMap((v) => String(v ?? '').split(/[\s,]+/)).map((k) => k.trim()).filter(Boolean))];
 }
-const SAVED_KEYS = 'api_keys';
-let adminKeys = {};
-try { adminKeys = JSON.parse(await getSetting(SAVED_KEYS, '{}')) || {}; } catch { adminKeys = {}; }
 
 const PROVIDER_LIST = {
   openrouter: { base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
@@ -50,11 +47,11 @@ const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p
       const panel = keysForUser(name);
       const now = Date.now();
       if (panel.some((k) => (keyCooldown.get(`k:${name}:${k}`) ?? 0) <= now)) return [...new Set(panel)];
-      return [...new Set([...fromEnv, ...(adminKeys[name] ?? [])])].filter((k) => !panel.includes(k));
+      return fromEnv.filter((k) => !panel.includes(k));
     },
     get roster() {
       if (isAdminOnlyProvider(name)) return [];
-      return [...new Set([...keysForUser(name), ...fromEnv, ...(adminKeys[name] ?? [])])];
+      return [...new Set([...keysForUser(name), ...fromEnv])];
     },
     get key() { return freeKeys(name)[0] ?? this.keys[0]; }, // ein gerade freier Schlüssel
   }];
@@ -161,49 +158,38 @@ async function withKeys(provider, model, send) {
   }
 }
 
-// Für den Admin-Bereich: Schlüssel (nur gekürzt) und ihr Zustand
+// Zustand eines Schlüssels für den Admin-Bereich (ohne den Schlüssel selbst): frei/teilweise/voll + Verbrauch heute
+export function keyRuntime(provider, key, now = Date.now()) {
+  if (!key) return { state: 'ok', until: null, usage: null, tracked: !!PROVIDERS[provider] };
+  const until = keyCooldown.get(`k:${provider}:${key}`) ?? 0;
+  const limited = [...keyCooldown.entries()].some(([id, ts]) => id.startsWith('m:') && id.endsWith(`:${key}`) && ts > now);
+  const u = keyUsageOf(provider, key);
+  return {
+    state: until > now ? 'full' : limited ? 'partly' : 'ok',
+    until: until > now ? until : null,
+    usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits } : null,
+    tracked: !!PROVIDERS[provider],
+  };
+}
+
+// Für Alarme und Tests: Schlüssel (nur gekürzt) und ihr Zustand pro Chat-Anbieter
 export function keyStatus() {
-  const now = Date.now();
   return Object.values(PROVIDERS).map((p) => ({
     provider: p.name,
     label: p.label,
     env: p.env,
     keys: (p.roster ?? p.keys).map((k) => {
-      const until = keyCooldown.get(`k:${p.name}:${k}`) ?? 0;
-      const limited = [...keyCooldown.entries()].some(([id, ts]) => id.startsWith('m:') && id.endsWith(`:${k}`) && ts > now);
-      const u = keyUsageOf(p.name, k);
       const fromPanel = keysForUser(p.name).includes(k);
-      return { id: maskKey(k), source: fromPanel ? 'panel' : p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok',
-        usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits } : null };
+      const r = keyRuntime(p.name, k);
+      return { id: maskKey(k), source: fromPanel ? 'panel' : 'render', until: r.until, state: r.state, usage: r.usage };
     }),
   }));
 }
 
-async function testKey(provider, key) {
-  const p = PROVIDERS[provider];
-  const url = provider === 'gemini' ? `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(key)}`
-    : provider === 'openrouter' ? `${p.base}/key` : `${p.base}/models`;
-  const res = await fetch(url, { headers: provider === 'gemini' ? {} : { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
-  return res.ok;
-}
-export async function addKey(provider, raw) {
-  const key = String(raw ?? '').trim();
-  if (!PROVIDERS[provider]) throw new Error(t('Unbekannter Anbieter.', 'Unknown provider.'));
-  if (!/^[\w.\-:]{16,300}$/.test(key)) throw new Error(t('Das sieht nicht wie ein Schlüssel aus.', 'That does not look like a key.'));
-  if (PROVIDERS[provider].keys.includes(key)) throw new Error(t('Diesen Schlüssel gibt es schon.', 'This key already exists.'));
-  if (!(await testKey(provider, key).catch(() => false))) throw new Error(t('Der Schlüssel funktioniert nicht – bitte prüfen.', 'The key does not work – please check it.'));
-  adminKeys = { ...adminKeys, [provider]: [...(adminKeys[provider] ?? []), key] };
-  await setSetting(SAVED_KEYS, JSON.stringify(adminKeys));
-  delete cache[provider];
-  return maskKey(key);
-}
-export async function removeKey(provider, id) {
-  const list = adminKeys[provider] ?? [];
-  const next = list.filter((k) => maskKey(k) !== id);
-  if (next.length === list.length) throw new Error(t('Nur im Admin-Bereich eingetragene Schlüssel lassen sich hier löschen.', 'Only keys added in the admin area can be removed here.'));
-  adminKeys = { ...adminKeys, [provider]: next };
-  await setSetting(SAVED_KEYS, JSON.stringify(adminKeys));
-  delete cache[provider];
+// Nach Änderungen an den Schlüsseln die Modell-Liste dieses Anbieters neu laden
+export function forgetModelCache(provider) {
+  if (provider) delete cache[provider];
+  else for (const k of Object.keys(cache)) delete cache[k];
 }
 export const demoMode = !Object.values(PROVIDERS).some((p) => p.keys.length);
 export const hasProvider = (name) => !!PROVIDERS[name]?.keys.length;
