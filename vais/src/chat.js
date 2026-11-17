@@ -1,6 +1,12 @@
 import express, { Router } from 'express';
 import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
 import { isStaff, inTestMode, isUnlimited } from './config.js';
+
+// ApeX ist die EINZIGE KI – für alle, auch für Admins und Mods im Testmodus (der bedeutet nur noch „keine Limits“ für Admins).
+// Die alten Module (Battle, Side by Side, Direkt, Agentenchats) ruhen: Code bleibt, ist aber nicht mehr erreichbar.
+// Nur die automatischen Tests schalten sie mit APEX_LEGACY_MODULES=1 ein, damit der ruhende Code geprüft bleibt –
+// auf Render ist das NIE gesetzt (siehe test/apex-only.test.js: ohne die Variable gibt es für niemanden Module).
+export const modulesEnabled = (user) => process.env.APEX_LEGACY_MODULES === '1' && inTestMode(user);
 import { registerCache } from './stability.js';
 import { helperQuota, ipAnswerQuota, undoIpAnswer } from './guard.js';
 import { faqMatch } from './faq.js';
@@ -124,17 +130,17 @@ setInterval(() => {
   for (const [k, list] of usage) if (list.every((ts) => now - ts > 5 * 60 * 1000)) usage.delete(k);
 }, 10 * 60 * 1000).unref();
 
-// ApeX (intern „agent“): die eine KI für alle. Andere Module/Modelle gibt es nur für Admins und Mods.
+// ApeX (intern „agent“): die eine KI für alle. Andere Module/Modelle gibt es nicht mehr.
 const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'ApeX', maker: 'VERTEX', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
-// Normale Nutzer chatten immer mit ApeX: alte Chats in anderen Modi werden beim Öffnen/Weiterschreiben umgestellt
+// Alle chatten immer mit ApeX: alte Chats in anderen Modi werden beim Öffnen/Weiterschreiben umgestellt
 export async function asApex(row, user) {
-  if (!row || inTestMode(user) || row.mode === 'agent') return row; // Admins/Mods ohne Testmodus: wie normale Nutzer
+  if (!row || modulesEnabled(user) || row.mode === 'agent') return row;
   await run('UPDATE chats SET mode = ?, modality = ?, model_a = ?, model_b = NULL WHERE id = ?', 'agent', 'auto', 'agent', row.id);
   return Object.assign(row, { mode: 'agent', modality: 'auto', model_a: 'agent', model_b: null, winner: null });
 }
 const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
-  if (!inTestMode(req.user)) return res.json({ models: [AGENT_MODEL], demo: demoMode, apexOnly: true });
+  if (!modulesEnabled(req.user)) return res.json({ models: [AGENT_MODEL], demo: demoMode, apexOnly: true });
   res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
 
@@ -199,9 +205,9 @@ setInterval(() => {
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
-  const staff = inTestMode(req.user); // Module nur im Testmodus
+  const staff = modulesEnabled(req.user); // immer false: nur ApeX
   const { models = [], title } = req.body ?? {};
-  // Normale Nutzer: immer ApeX – egal, welcher Modus/welches Modell geschickt wird
+  // Alle: immer ApeX – egal, welcher Modus/welches Modell geschickt wird
   const mode = staff ? req.body?.mode : 'agent';
   const modality = staff && MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
   let picked;
@@ -209,7 +215,7 @@ chat.post('/start', wrap(async (req, res) => {
     picked = ['agent'];
   } else if (mode === 'life') {
     // Agentenchats (Beta): vorerst nur für Mods und Admins
-    if (!inTestMode(req.user)) throw new HttpError(403, t('Agentenchats sind noch in der Beta und nur für Mods und Admins.', 'Agent chats are still in beta and only for mods and admins.'));
+    if (!modulesEnabled(req.user)) throw new HttpError(403, t('Agentenchats sind noch in der Beta und nur für Mods und Admins.', 'Agent chats are still in beta and only for mods and admins.'));
     picked = ['agent'];
   } else if (mode === 'battle') {
     const cap = modality === 'image' ? 'image' : req.body?.images ? 'vision' : MODALITY_CAP[modality];
@@ -387,7 +393,7 @@ chat.post('/stream', wrap(async (req, res) => {
   // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, kostet nichts
   const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
-  if (!blocked && !faq && kind && !inTestMode(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
+  if (!blocked && !faq && kind && !isUnlimited(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
   // „Denken“: gründlicher nachdenken lassen – kostet den Zuschlag für lange Antworten (nicht bei ApeX und Bildern)
   const think = !!req.body?.think && (kind === 'text' || kind === 'web');
   const costs = await costSettings();
@@ -779,7 +785,7 @@ const boards = new Map();
 export const clearBoards = () => boards.clear();
 registerCache('boards', clearBoards);
 chat.get('/leaderboard', wrap(async (req, res) => {
-  if (!inTestMode(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // Modell-Bestenliste nur intern
+  if (!modulesEnabled(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // keine Modell-Bestenliste mehr (nur ApeX)
   const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
   const cached = boards.get(cat);
   if (cached && Date.now() - cached.at < 60_000) return res.json(cached.data);
@@ -1010,7 +1016,7 @@ chat.post('/translate', wrap(async (req, res) => {
   limit(req.user, L.burst);
   const unsafe = await checkText(text, 'prompt');
   if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
-  if (!inTestMode(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
+  if (!isUnlimited(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
   const charged = await reserve(req.user, (await costSettings()).answer); // eine einfache Antwort
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
@@ -1098,8 +1104,8 @@ chat.get('/stats', wrap(async (req, res) => {
     chats, questions, votes, likes,
     modes: Object.fromEntries(byMode.map((r) => [r.mode, Number(r.n)])),
     // Modellnamen bleiben intern: normale Nutzer sehen nur ApeX
-    favorites: inTestMode(req.user) ? await top(wins) : [],
-    mostUsed: inTestMode(req.user) ? await top(used) : [],
+    favorites: modulesEnabled(req.user) ? await top(wins) : [],
+    mostUsed: modulesEnabled(req.user) ? await top(used) : [],
     since: req.user.created_at,
     usage: await usageWithCosts(req.user),
   });
@@ -1215,6 +1221,7 @@ chat.delete('/:id', wrap(async (req, res) => {
 // Abstimmen (einmal pro Chat). Gibt die Modellnamen zurück → Auflösung im Battle.
 chat.post('/vote', wrap(async (req, res) => {
   const { chatId, winner } = req.body ?? {};
+  if (!modulesEnabled(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // kein Battle mehr (nur ApeX)
   if (!WINNERS.has(winner)) throw new HttpError(400, t('Ungültige Stimme.', 'Invalid vote.'));
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row || !row.model_b) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));

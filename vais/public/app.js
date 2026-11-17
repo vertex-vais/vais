@@ -78,18 +78,19 @@ Object.assign(ICON, {
   life: svg('<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.3-6 6.5-6s5.7 2.4 6.5 6"/><path d="M18.5 3l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/>'),
 });
 
-// ApeX ist die eine KI für alle. Die übrigen Module sind Test-Werkzeuge nur für Admins und Mods
-// (kleiner Umschalter im Eingabefeld, siehe renderModeMenu) – normale Nutzer sehen sie nirgends.
+// ApeX ist die EINE KI für alle – auch für Admins und Mods (auch im Testmodus). Es gibt keinen Modus-Umschalter mehr.
+// Die alten Modi stehen hier nur noch, damit alte Statistiken/Chats ihre Namen behalten; der Server stellt alles auf ApeX um.
 const MODES = {
   agent: { label: 'ApeX', desc: t('Standard – so chatten alle Nutzer', 'Default – what every user chats with') },
-  life: { label: t('Agentenchats', 'Agent chats'), desc: t('Admin-Test: offen und persönlich, mit Gedächtnis', 'Admin test: open and personal, with memory'), staff: true },
-  battle: { label: 'Battle', desc: t('Admin-Test: 2 anonyme Modelle im Vergleich', 'Admin test: 2 anonymous models head to head'), staff: true },
-  sxs: { label: 'Side by Side', desc: t('Admin-Test: 2 Modelle vergleichen', 'Admin test: compare 2 models'), staff: true },
-  direct: { label: t('Direkt', 'Direct'), desc: t('Admin-Test: mit 1 Modell chatten', 'Admin test: chat with 1 model'), staff: true },
+  life: { label: t('Agentenchats', 'Agent chats'), desc: '', staff: true },
+  battle: { label: 'Battle', desc: '', staff: true },
+  sxs: { label: 'Side by Side', desc: '', staff: true },
+  direct: { label: t('Direkt', 'Direct'), desc: '', staff: true },
 };
 
 let isStaffUser = false;
-// Testmodus (nur Admins/Mods, im Admin-Bereich umschaltbar): erst dann gibt es Module, Bestenliste usw. Sonst: ApeX wie für alle.
+// Testmodus (nur Admins/Mods, im Admin-Bereich umschaltbar): bedeutet NUR noch „keine Limits“ für Admins (Mods behalten ihre Limits).
+// Er schaltet keine Module frei – alle chatten ausschließlich mit ApeX.
 let isTestUser = false;
 let creditsUnlimited = false; // Admin im Testmodus: keine Credits-Anzeige
 // Sanfter Hinweis, wenn das Tagesbudget fast aufgebraucht ist (pro Stufe nur einmal am Tag)
@@ -276,7 +277,7 @@ const state = {
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
 };
-if (!MODES[state.mode]) state.mode = 'battle';
+state.mode = 'agent'; // immer ApeX
 if (!MODALITIES[state.modality] || MODALITIES[state.modality].soon) state.modality = 'auto';
 
 const el = {
@@ -295,11 +296,6 @@ const el = {
   form: $('#composer'),
   prompt: $('#prompt'),
   send: $('#send'),
-  modeBtn: $('#mode-btn'),
-  modalityBtn: $('#modality-btn'),
-  modalityMenu: $('#modality-menu'),
-  modeMenu: $('#mode-menu'),
-  chips: [...document.querySelectorAll('.model-chip')],
   vote: $('#vote'),
   voteResult: $('#vote-result'),
   sheet: $('#model-sheet'),
@@ -311,114 +307,14 @@ const busy = () => state.controllers.size > 0;
 const modelById = (id) => state.models.find((m) => m.id === id);
 
 // ── Steuerung unten (Modus + Modelle) ─────────────────────────────
-// Schnellwahl unter dem Eingabefeld (nur auf der Startseite): Websuche, Bild, Code, ApeX
-const PILLS = [
-  { key: 'web', kind: 'modality', ico: '🌐', label: () => 'Web' },
-  { key: 'image', kind: 'modality', ico: '🎨', label: () => t('Bild', 'Image') },
-  { key: 'code', kind: 'modality', ico: '</>', label: () => 'Code' },
-];
-let modeBeforeAgent = null;
-function renderPills() {
-  const box = $('#mode-pills');
-  if (!box) return;
-  // Web/Bild/Code-Schnellwahl gibt es nur in den Admin-Modulen – ApeX entscheidet selbst, ob es sucht, malt oder programmiert
-  box.hidden = !!state.chat || !isTestUser || isAgentMode(state.mode);
-  if (box.hidden) return;
-  box.innerHTML = PILLS.map((p) => {
-    const on = p.kind === 'mode' ? state.mode === 'agent' : !isAgentMode(state.mode) && state.modality === p.key;
-    return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
-  }).join('');
-}
-$('#mode-pills')?.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-pill]');
-  if (!b) return;
-  const pill = PILLS.find((p) => p.key === b.dataset.pill);
-  haptic('tap');
-  if (pill.kind === 'mode') {
-    // ApeX an/aus (danach wieder der vorige Modus)
-    const next = state.mode === 'agent' ? (modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct') : 'agent';
-    if (next === 'agent') modeBeforeAgent = state.mode;
-    state.mode = next;
-    store.set('vais.mode', next);
-    store.set('vais.modePicked', true);
-  } else {
-    if (isAgentMode(state.mode)) { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); store.set('vais.modePicked', true); }
-    const next = state.modality === pill.key ? 'auto' : pill.key; // nochmal tippen = aus
-    state.modality = next;
-    store.set('vais.modality', next);
-    fitPicks();
-  }
-  renderControls();
-  el.prompt.focus();
-});
-
+// Keine Schnellwahl (Web/Bild/Code) und kein Modus-Umschalter: ApeX entscheidet selbst, ob es sucht, malt oder programmiert.
 function renderControls() {
-  if (!isTestUser && !state.chat) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX
-  queueMicrotask(renderPills);
-  el.modeBtn.hidden = !isTestUser; // Modul-Umschalter nur für Admins und Mods
-  el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
-  el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
-  el.modalityBtn.hidden = !isTestUser || isAgentMode(state.mode);
-  el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
-  el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
-  el.chips.forEach((chip, slot) => {
-    const show = isTestUser && (state.mode === 'sxs' || (state.mode === 'direct' && slot === 0));
-    chip.hidden = !show;
-    if (!show) return;
-    const m = modelById(state.picks[slot]);
-    chip.innerHTML = m
-      ? `${modelLogo(m)}<span class="name">${escapeHtml(m.auto ? 'Auto' : m.name)}</span>${ICON.chev}`
-      : `<span class="name">${t('Modell wählen', 'Choose model')}</span>${ICON.chev}`;
-    chip.setAttribute('aria-label', `${t('Modell', 'Model')} ${slot + 1}: ${m?.name ?? t('keins gewählt', 'none chosen')}`);
-  });
+  state.mode = 'agent'; state.modality = 'auto'; // alle (auch Admins/Mods im Testmodus): nur ApeX
   el.prompt.placeholder = state.chat ? t('Folgefrage stellen …', 'Ask a follow-up …') : t('Frag irgendwas …', 'Ask anything …');
 }
 
-function renderModeMenu() {
-  el.modeMenu.innerHTML = Object.entries(MODES).filter(([, m]) => !m.staff || isTestUser).map(([key, m]) => `
-    <button type="button" class="mode-item" role="menuitemradio" aria-checked="${key === state.mode}" data-mode="${key}">
-      ${ICON[key]}<span><b>${m.label}</b><small>${m.desc}</small></span>${key === state.mode ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
-    </button>`).join('');
-}
-
-function toggleModeMenu(open = el.modeMenu.hidden) {
-  if (open) renderModeMenu();
-  el.modeMenu.hidden = !open;
-  el.modeBtn.setAttribute('aria-expanded', String(open));
-  if (open) $('.mode-item[aria-checked="true"]', el.modeMenu)?.focus();
-}
-
-el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!isTestUser) return; el.modalityMenu.hidden = true; toggleModeMenu(); });
-el.modeMenu.addEventListener('click', (e) => {
-  const item = e.target.closest('[data-mode]');
-  if (!item) return;
-  toggleModeMenu(false);
-  const mode = item.dataset.mode;
-  if (mode === state.mode) return;
-  state.mode = mode;
-  store.set('vais.mode', mode);
-  store.set('vais.modePicked', true); // selbst gewählt → bleibt
-  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODES[mode].label}`); }
-  renderControls();
-  el.prompt.focus();
-});
-
-// ── Art der Anfrage (Auto, Text, Code, Websuche …) ─────────────────
+// ── Art der Anfrage (alt, nur noch intern): ApeX nutzt immer „auto“ ──
 const currentCap = () => MODALITIES[state.modality].cap;
-
-function renderModalityMenu() {
-  el.modalityMenu.innerHTML = Object.entries(MODALITIES).map(([key, m]) => `
-    <button type="button" class="mode-item${m.soon ? ' soon' : ''}" role="menuitemradio" aria-checked="${key === state.modality}" aria-disabled="${!!m.soon}" data-modality="${key}">
-      ${ICON[`m-${key}`]}<span><b>${m.label}${m.soon ? ` <em>${t('bald', 'soon')}</em>` : ''}</b><small>${m.desc}</small></span>${key === state.modality ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
-    </button>`).join('');
-}
-
-function toggleModalityMenu(open = el.modalityMenu.hidden) {
-  if (open) { renderModalityMenu(); toggleModeMenu(false); }
-  el.modalityMenu.hidden = !open;
-  el.modalityBtn.setAttribute('aria-expanded', String(open));
-  if (open) $('.mode-item[aria-checked="true"]', el.modalityMenu)?.focus();
-}
 
 // Gewählte Modelle passend zur Art machen (z. B. bei „Websuche“ nur Such-Modelle)
 function fitPicks() {
@@ -429,22 +325,6 @@ function fitPicks() {
     state.picks[slot] = fitting.find((m) => m.id !== state.picks[1 - slot])?.id ?? state.picks[slot];
   });
 }
-
-el.modalityBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModalityMenu(); });
-el.modalityMenu.addEventListener('click', (e) => {
-  const item = e.target.closest('[data-modality]');
-  if (!item) return;
-  const key = item.dataset.modality;
-  if (MODALITIES[key].soon) return toast(`${MODALITIES[key].label} ${t('kommt bald', 'is coming soon')}`);
-  toggleModalityMenu(false);
-  if (key === state.modality) return;
-  state.modality = key;
-  store.set('vais.modality', key);
-  fitPicks();
-  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODALITIES[key].label}`); }
-  renderControls();
-  el.prompt.focus();
-});
 
 // ── Modellauswahl ─────────────────────────────────────────────────
 let sheetSlot = 0;
@@ -484,9 +364,8 @@ function openSheet(slot) {
   el.sheet.hidden = false;
   requestAnimationFrame(() => (matchMedia('(pointer: fine)').matches ? el.search : $('.model-opt.selected', el.list) ?? el.search)?.focus());
 }
-const closeSheet = () => { el.sheet.hidden = true; el.chips[sheetSlot].focus(); };
+const closeSheet = () => { el.sheet.hidden = true; el.prompt.focus(); };
 
-el.chips.forEach((chip, slot) => chip.addEventListener('click', () => openSheet(slot)));
 el.search.addEventListener('input', renderModelList);
 el.sheet.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeSheet();
@@ -524,7 +403,6 @@ function showView(view) {
   $('#share-chat').hidden = view !== 'thread';
   $('#suggest').hidden = view !== 'home';
   document.body.dataset.view = view;
-  renderPills();
   if (view === 'home' || view === 'thread') paintIncognito();
   else { $('#incognito-btn').hidden = true; $('#incognito-banner').hidden = true; }
   if (view === 'board' || view === 'stats' || view === 'konto') el.title.textContent = '';
@@ -1249,7 +1127,7 @@ async function send() {
   }
 
   if (!state.chat) {
-    if (!isTestUser) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX (der Server erzwingt das auch)
+    state.mode = 'agent'; state.modality = 'auto'; // alle: immer ApeX (der Server erzwingt das auch)
     if (state.mode === 'sxs' || state.mode === 'direct') {
       const need = state.mode === 'sxs' ? 2 : 1;
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
@@ -2921,8 +2799,6 @@ el.form.addEventListener('submit', (e) => {
 
 // ── Menüs schließen ───────────────────────────────────────────────
 document.addEventListener('click', (e) => {
-  if (!el.modeMenu.hidden && !el.modeMenu.contains(e.target)) toggleModeMenu(false);
-  if (!el.modalityMenu.hidden && !el.modalityMenu.contains(e.target)) toggleModalityMenu(false);
   if (!$('#account-menu').hidden && !$('.account').contains(e.target)) toggleAccount(false);
 });
 document.addEventListener('keydown', (e) => {
@@ -2930,11 +2806,9 @@ document.addEventListener('keydown', (e) => {
   if (!$('#share-sheet').hidden) closeShare();
   else if (!$('#settings').hidden) closeSettings();
   else if (!$('#preview').hidden) closePreview();
-  else if (!el.modalityMenu.hidden) { toggleModalityMenu(false); el.modalityBtn.focus(); }
   else if (!el.drawer.hidden) closeDrawer();
   else if (!$('#expand').hidden) $('#expand').hidden = true;
   else if (!el.sheet.hidden) closeSheet();
-  else if (!el.modeMenu.hidden) { toggleModeMenu(false); el.modeBtn.focus(); }
   else toggleAccount(false);
 });
 
@@ -2994,7 +2868,7 @@ function resumeLast() {
 async function route() {
   const h = location.hash;
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
-  if (h === '#bestenliste') { if (isTestUser) return showBoard(); history.replaceState(null, '', location.pathname); } // Modell-Bestenliste nur intern
+  if (h === '#bestenliste') { history.replaceState(null, '', location.pathname); } // keine Modell-Bestenliste mehr – nur ApeX
   if (h === '#statistik') return showStats();
   if (h === '#kontostand') return showKonto();
   if (h === '#geraete') {
@@ -3046,8 +2920,8 @@ async function loadChat(id) {
     incognito: data.incognito,
     turns: data.turns,
   };
-  state.mode = data.mode;
-  if (MODALITIES[data.modality] && !MODALITIES[data.modality].soon) state.modality = data.modality;
+  state.mode = 'agent'; // nur ApeX (der Server stellt alte Chats beim Öffnen um)
+  state.modality = 'auto';
   if (data.models?.every((m) => modelById(m))) data.models.forEach((m, i) => { state.picks[i] = m; });
   el.thread.innerHTML = '';
   el.vote.hidden = true;
@@ -3558,7 +3432,6 @@ async function showStats() {
     const tiles = [
       [d.chats, t('Chats', 'Chats')],
       [d.questions, t('Fragen gestellt', 'Questions asked')],
-      ...(isTestUser ? [[d.votes, t('Battle-Stimmen', 'Battle votes')]] : []),
       [d.likes, t('Antworten mit 👍', 'Answers with 👍')],
     ];
     renderUsage(d.usage);
@@ -4033,6 +3906,23 @@ function addAdminLinks(mod) {
   $('#set-email')?.after(set);
 }
 
+// Testmodus wurde im Admin-Bereich umgeschaltet → Status sofort übernehmen (ohne Neuladen).
+// Er ändert nur Limits/Anzeige – ApeX bleibt für alle die einzige KI.
+async function refreshTestMode() {
+  try {
+    const res = await fetch('/api/auth/me', { cache: 'no-store' });
+    if (!res.ok) return;
+    const u = (await res.json()).user;
+    if (!u) return;
+    isTestUser = u.testMode === true;
+    creditsUnlimited = u.unlimited === true;
+    document.body.classList.toggle('test-mode', isTestUser);
+    ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => $(sel)?.remove());
+    if (u.admin === true || u.mod === true) addAdminLinks(u.mod === true);
+    renderControls();
+  } catch { /* offline: beim nächsten Mal */ }
+}
+
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
   let user;
@@ -4073,12 +3963,12 @@ async function init() {
   setTourPending(user.tour === true); // Tour nur, wenn der Server sagt: neues Konto, noch nie gesehen
   if (user.admin === true || user.mod === true) {
     isStaffUser = true;
-    isTestUser = user.testMode === true; // Testmodus aus → ApeX genau wie für normale Nutzer
-    document.body.classList.toggle('is-staff', isTestUser);
+    isTestUser = user.testMode === true; // Testmodus = nur „keine Limits“ (Admins); Module gibt es nicht mehr
     document.body.classList.toggle('test-mode', isTestUser);
     addAdminLinks(user.mod === true);
-    // Testmodus im Admin-Bereich (anderer Tab) umgeschaltet → Chat neu laden, damit er passt
-    window.addEventListener('storage', (e) => { if (e.key === 'apex-test-mode' && (e.newValue === '1') !== isTestUser) location.reload(); });
+    // Testmodus im Admin-Bereich (anderer Tab/zurück zur App) umgeschaltet → sofort neu einlesen, ohne Neuladen
+    window.addEventListener('storage', (e) => { if (e.key === 'apex-test-mode' && (e.newValue === '1') !== isTestUser) refreshTestMode(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) refreshTestMode(); });
   }
   // Verlauf schon im Hintergrund holen, damit die Seitenleiste sofort die Titel zeigt
   setTimeout(() => { if (historyDirty) fetchHistory(); }, 1200);
