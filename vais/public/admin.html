@@ -32,7 +32,7 @@
     <section class="adm-card adm-testmode" id="testmode-card">
       <h2 data-en="Test mode">Testmodus</h2>
       <label class="adm-switch">
-        <span><b data-en="Test mode for my account">Testmodus für mein Konto</b><small id="testmode-hint" data-en="Off: you use ApeX exactly like a normal user – only ApeX, same daily limits. On: test modules (Battle, Direct …) in the chat and no limits for you. Only affects your own account.">Aus: Du nutzt ApeX genau wie ein normaler Nutzer – nur ApeX, gleiche Tageslimits. An: Test-Module (Battle, Direkt …) im Chat und für dich keine Limits. Gilt nur für dein eigenes Konto.</small></span>
+        <span><b data-en="Test mode for my account">Testmodus für mein Konto</b><small id="testmode-hint" data-en="Off: you use ApeX exactly like a normal user – only ApeX, same daily budget. On: test modules (Battle, Direct …) in the chat and no limits for you. Only affects your own account.">Aus: Du nutzt ApeX genau wie ein normaler Nutzer – nur ApeX, gleiches Tagesbudget. An: Test-Module (Battle, Direkt …) im Chat und für dich keine Limits. Gilt nur für dein eigenes Konto.</small></span>
         <input type="checkbox" id="testmode-on" role="switch">
       </label>
       <p class="adm-sub" id="testmode-state"></p>
@@ -153,10 +153,13 @@
     </section>
 
     <section class="adm-card" data-admin-only>
-      <h2 data-en="Daily limits">Tageslimits</h2>
-      <p class="adm-sub" data-en="Every user gets a fixed number of answers, web searches, images and ApeX tasks per day – this way enough is left for everyone. Resets at midnight (German time).">Jeder bekommt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und ApeX-Aufträge – so bleibt für alle genug übrig. Neu um Mitternacht (deutsche Zeit).</p>
+      <h2 data-en="Daily budget">Tagesbudget</h2>
+      <p class="adm-sub" data-en="Every user gets the same number of credits per day. What an answer costs depends on how much work ApeX really did: a short answer costs little, web searches, images, deep research and websites cost more. This way everyone can use ApeX fairly. Charged only when the answer is finished; if ApeX does not answer, nothing is charged. Resets at midnight (German time). Admins in test mode have no limit.">Jeder bekommt pro Tag gleich viele Credits. Was eine Antwort kostet, hängt davon ab, wie viel ApeX wirklich gearbeitet hat: Eine kurze Antwort kostet wenig, Websuchen, Bilder, tiefe Recherchen und Webseiten kosten mehr. So kann jeder ApeX fair nutzen. Abgerechnet wird erst, wenn die Antwort fertig ist – antwortet ApeX nicht, kostet es nichts. Neu um Mitternacht (deutsche Zeit). Admins im Testmodus haben kein Limit.</p>
       <form class="adm-form" id="limits-form" novalidate>
         <div class="adm-fields" id="limit-fields"></div>
+        <h3 class="adm-subhead" data-en="Cost per action (credits)">Kosten pro Arbeit (Credits)</h3>
+        <p class="adm-hint" data-en="Base price plus surcharges for what ApeX did. Expensive work (images, websites, deep research) only starts if the user still has enough credits.">Grundpreis plus Zuschläge für das, was ApeX gemacht hat. Teure Arbeit (Bilder, Webseiten, tiefe Recherche) startet nur, wenn noch genug Credits da sind.</p>
+        <div class="adm-fields" id="cost-fields"></div>
         <p class="adm-hint" id="limit-example"></p>
         <button class="adm-btn primary" type="submit" data-en="Save">Speichern</button>
       </form>

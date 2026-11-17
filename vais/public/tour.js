@@ -1,9 +1,8 @@
 // Willkommens-Tour beim ersten Besuch: hebt nacheinander die wichtigsten Knöpfe hervor
 import { t } from './i18n.js';
 
-const KEY = 'vais_tour_done';
-// Neue Tour (ApeX = eine KI): wer die alte gesehen hat, bekommt sie einmal neu
-const VERSION = '2';
+// Ob die Tour schon gezeigt wurde, merkt sich der Server pro Konto (nur einmal direkt nach der Registrierung).
+// Keine Versionsnummer mehr: neue Tour-Texte oder App-Versionen zeigen sie NICHT erneut.
 const STEPS = () => [
   { title: t('Willkommen bei ApeX 👋', 'Welcome to ApeX 👋'), text: t('ApeX ist deine KI von VERTEX – kostenlos. Eine kurze Tour?', 'ApeX is your AI by VERTEX – for free. A quick tour?') },
   { target: '.composer', title: t('Frag einfach', 'Just ask'), text: t('Schreib, was du brauchst. ApeX recherchiert im Web, schreibt Texte, malt Bilder, programmiert und baut Webseiten – ganz von selbst.', 'Write what you need. ApeX searches the web, writes, draws images, codes and builds websites – all on its own.') },
@@ -11,12 +10,19 @@ const STEPS = () => [
   { target: '#open-drawer', title: t('Deine Chats', 'Your chats'), text: t('Hier findest du deine Chats, deine Statistik und die Einstellungen.', 'Here you find your chats, your stats and settings.') },
 ];
 
-export function tourDone() {
-  try { return localStorage.getItem(KEY) === VERSION; } catch { return true; }
+let pending = false; // vom Server: dieses Konto hat die Tour noch nie gesehen
+export function setTourPending(on) { pending = !!on; }
+export function tourDone() { return !pending; }
+// Sofort beim Zeigen merken (auch wenn die App gleich geschlossen wird)
+export function markTourSeen() {
+  if (!pending) return;
+  pending = false;
+  fetch('/api/auth/tour-seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
 }
 
 export function startTour() {
   if (document.querySelector('.tour')) return;
+  markTourSeen();
   const steps = STEPS();
   let i = 0;
   const root = document.createElement('div');
@@ -83,7 +89,6 @@ export function startTour() {
   }
 
   function end() {
-    try { localStorage.setItem(KEY, VERSION); } catch { /* egal */ }
     window.removeEventListener('resize', place);
     document.removeEventListener('keydown', onKey, true);
     root.classList.add('out');

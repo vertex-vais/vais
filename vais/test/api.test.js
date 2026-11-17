@@ -97,9 +97,12 @@ test('Registrieren, chatten, Verlauf, Verbrauch', async () => {
   const list = (await c.json('/api/chat/list')).data.chats;
   assert.equal(list.length, 1);
   const usage = (await c.json('/api/chat/usage')).data;
-  assert.equal(usage.kinds.text.used, 1); // zählt als eine Antwort
-  assert.equal(usage.kinds.agent.used, 0);
-  assert.ok(usage.kinds.text.percent >= 1 && usage.kinds.text.percent <= 100);
+  assert.equal(usage.credits.used, 1); // einfache Antwort = 1 Credit
+  assert.equal(usage.credits.limit, 100);
+  assert.equal(usage.credits.left, 99);
+  assert.equal(usage.percent, 1);
+  assert.equal(usage.costs.answer, 1);
+  assert.ok(out.lines.some((l) => l.usage?.cost === 1 && l.usage.left === 99), 'Kosten der Antwort werden mitgeschickt');
 });
 
 test('Agent X reagiert und zählt „ok“ nicht', async () => {
@@ -107,8 +110,8 @@ test('Agent X reagiert und zählt „ok“ nicht', async () => {
   const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Agent' });
   const one = await stream(c, start.data.id, 'Erzähl mir einen Witz');
   assert.ok(!one.lines.some((l) => l.react), 'normale Frage → kein Emoji');
-  const before = (await c.json('/api/chat/usage')).data.kinds.agent.used;
-  assert.equal(before, 1); // ein Agent-X-Auftrag
+  const before = (await c.json('/api/chat/usage')).data.credits.used;
+  assert.equal(before, 6); // gesucht (3×) und gelesen (1×): 1 + 2 + 3 – mehr Arbeit, mehr Credits
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Witz' }, { role: 'assistant', content: 'Haha, fertig.' }, { role: 'user', content: 'ok danke' }], display: { text: 'ok danke' } });
   const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(lines.some((l) => l.react === '❤️'));
@@ -116,7 +119,7 @@ test('Agent X reagiert und zählt „ok“ nicht', async () => {
   const pl = (await praise.text()).trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(pl.some((l) => l.react === '❤️'));
   assert.ok(!pl.some((l) => l.t), 'nur Emoji, kein Text');
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.agent.used, before); // zählt nicht
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, before); // kostet nichts
 });
 
 test('Admin-Bereich nur für Admins', async () => {
@@ -156,14 +159,14 @@ test('Testmodus aus: Admin erlebt ApeX wie ein normaler Nutzer (nur ApeX, normal
   // gleiche Limits wie alle
   const usage = (await a.json('/api/chat/usage')).data;
   assert.equal(usage.unlimited, false);
-  assert.equal(usage.kinds.agent.limit, 15);
-  assert.equal((await a.json('/api/admin/limits', { limits: { agent: 1 } })).status, 200);
+  assert.equal(usage.credits.limit, 100);
+  assert.equal((await a.json('/api/admin/limits', { limits: { budget: 1 } })).status, 200);
   try {
     assert.equal((await stream(a, start.data.id, 'Erzähl mir einen Witz', 0)).status, 200);
     const res = await a.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Und noch einen Witz bitte' }], display: { text: 'Und noch einen Witz bitte' } });
     assert.equal(res.status, 429);
   } finally {
-    await a.json('/api/admin/limits', { limits: { agent: 15 } });
+    await a.json('/api/admin/limits', { limits: { budget: 100 } });
   }
 });
 
@@ -185,11 +188,12 @@ test('Testmodus an: Admin hat Module und keine Limits', async () => {
   assert.equal(start.status, 200);
   assert.equal((await a.json(`/api/chat/${start.data.id}`)).data.mode, 'direct');
   assert.equal((await a.json('/api/chat/usage')).data.unlimited, true);
-  assert.equal((await a.json('/api/admin/limits', { limits: { text: 1, burst: 1 } })).status, 200);
+  assert.equal((await a.json('/api/admin/limits', { limits: { budget: 1, burst: 1 } })).status, 200);
   try {
     for (let i = 0; i < 3; i++) assert.equal((await stream(a, start.data.id, `Frage ${i}`, i)).status, 200);
+    assert.equal((await a.json('/api/chat/usage')).data.credits.left, null); // unbegrenzt
   } finally {
-    await a.json('/api/admin/limits', { limits: { text: 100, burst: 40 } });
+    await a.json('/api/admin/limits', { limits: { budget: 100, burst: 40 } });
   }
   // wieder aus → sofort wie normaler Nutzer
   assert.equal((await a.json('/api/admin/test-mode', { on: false })).data.on, false);
@@ -221,10 +225,10 @@ test('Gesperrte Nutzer kommen nicht mehr rein', async () => {
   assert.equal(again.status, 403);
 });
 
-test('Tageslimit greift und zeigt 100 %', async () => {
+test('Tagesbudget greift und zeigt 100 %', async () => {
   const a = client();
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
-  assert.equal((await a.json('/api/admin/limits', { limits: { text: 2 } })).status, 200);
+  assert.equal((await a.json('/api/admin/limits', { limits: { budget: 2 } })).status, 200);
   const c = await signUpTester('limit@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'L' });
@@ -234,10 +238,11 @@ test('Tageslimit greift und zeigt 100 %', async () => {
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 3, messages: [{ role: 'user', content: 'd' }] });
   assert.equal(res.status, 429);
   const u = (await c.json('/api/chat/usage')).data;
-  assert.equal(u.kinds.text.percent, 100);
-  assert.equal(u.kinds.agent.percent, 0); // andere Arten haben eigene Zähler
+  assert.equal(u.credits.percent, 100);
+  assert.equal(u.credits.left, 0);
+  assert.match((await res.json()).error, /Tagesbudget/);
   assert.ok(blocked);
-  await a.json('/api/admin/limits', { limits: { text: 100 } });
+  await a.json('/api/admin/limits', { limits: { budget: 100 } });
 });
 
 test('Persönliches: Anweisungen und Gedächtnis', async () => {
@@ -351,11 +356,11 @@ test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
 
 test('Übersetzer übersetzt und zählt eine Antwort', async () => {
   const c = await signUp('tr@example.com');
-  const before = (await c.json('/api/chat/usage')).data.kinds.text.used;
+  const before = (await c.json('/api/chat/usage')).data.credits.used;
   const r = await c.json('/api/chat/translate', { text: 'Wo ist der Bahnhof?', from: 'Deutsch', to: 'English' });
   assert.equal(r.status, 200);
   assert.ok(r.data.text.length > 3);
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, before + 1);
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, before + 1);
   assert.equal((await c.json('/api/chat/translate', { text: '', to: 'English' })).status, 400);
 });
 
@@ -363,12 +368,12 @@ test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung H
   const c = await signUpTester('safe@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'S' });
-  const before = (await c.json('/api/chat/usage')).data.kinds.text.used;
+  const before = (await c.json('/api/chat/usage')).data.credits.used;
   const bad = await stream(c, start.data.id, 'TESTUNSAFE bitte', 0);
   assert.match(bad.text, /nicht helfen|can’t help/);
   const help = await stream(c, start.data.id, 'TESTSELFHARM', 1);
   assert.match(help.text, /116 111/);
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, before); // geblockte Anfragen zählen nicht
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, before); // geblockte Anfragen zählen nicht
   const ok = await stream(c, start.data.id, 'Wie backe ich Brot?', 2);
   assert.ok(ok.text.length > 10 && !/nicht helfen|can’t help/.test(ok.text));
 });
@@ -416,7 +421,7 @@ test('Mods: dürfen moderieren, aber keine Admin-Einstellungen', async () => {
   assert.equal((await a.json('/api/admin/role', { userId: fid, role: 'mod' })).status, 200);
   assert.equal((await friend.json('/api/auth/me')).data.user.mod, true);
   assert.equal((await friend.json('/api/admin/overview')).data.role, 'mod');
-  assert.equal((await friend.json('/api/admin/limits', { limits: { text: 5 } })).status, 403);
+  assert.equal((await friend.json('/api/admin/limits', { limits: { budget: 5 } })).status, 403);
   assert.equal((await friend.json('/api/admin/keys')).status, 403);
   assert.equal((await friend.json('/api/admin/announce', { title: 'x', body: 'y' })).status, 403);
   assert.equal((await friend.json('/api/admin/block', { userId: tid, blocked: true })).status, 200);
@@ -582,12 +587,12 @@ test('Antwort-Speicher: gleiche erste Frage kommt sofort und zählt nicht', asyn
   const one = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C1' });
   const a = await stream(c, one.data.id, 'Was ist ein Regenbogen?');
   assert.ok(!a.lines.some((l) => l.cached));
-  const used = (await c.json('/api/chat/usage')).data.kinds.text.used;
+  const used = (await c.json('/api/chat/usage')).data.credits.used;
   const two = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C2' });
   const b = await stream(c, two.data.id, 'was ist ein regenbogen');
   assert.ok(b.lines.some((l) => l.cached), 'zweites Mal aus dem Speicher');
   assert.equal(b.text, a.text);
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, used); // zählt nicht
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, used); // zählt nicht
   // „Neu generieren“ (fresh) fragt wieder das Modell
   const res = await c.call('/api/chat/stream', { chatId: two.data.id, side: 0, turn: 0, fresh: true, messages: [{ role: 'user', content: 'was ist ein regenbogen' }], display: { text: 'was ist ein regenbogen' } });
   const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
@@ -669,11 +674,11 @@ test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Frag
   // normaler Nutzer: „direct“ wird vom Server zu ApeX
   const start = await u.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first?.id], title: 'F' });
   assert.equal(start.status, 200);
-  const before = (await u.json('/api/chat/usage')).data.kinds.text.used;
+  const before = (await u.json('/api/chat/usage')).data.credits.used;
   const r = await stream(u, start.data.id, 'wer hat bitte apex gemacht');
   assert.ok(r.lines.some((l) => l.faq));
   assert.equal(r.text, 'ApeX hat Leeam gebaut 🚀');
-  assert.equal((await u.json('/api/chat/usage')).data.kinds.text.used, before); // zählt nicht
+  assert.equal((await u.json('/api/chat/usage')).data.credits.used, before); // zählt nicht
   const other = await stream(u, start.data.id, 'Was ist ein Wal?', 1);
   assert.ok(!other.lines.some((l) => l.faq));
   const list = (await a.json('/api/admin/faq')).data.faq;
@@ -697,7 +702,7 @@ test('Sicherheit: neues Konto erreicht nichts aus dem Admin-Bereich', async () =
   for (const path of ['/api/admin/overview', '/api/admin/users', '/api/admin/keys', '/api/admin/limits', '/api/admin/reports', '/api/admin/faq', '/api/admin/stats', '/api/admin/maintenance', '/api/admin/top-questions', '/api/admin/feedback', '/api/admin/sites', '/api/groups']) {
     assert.equal((await c.call(path)).status, 404, path);
   }
-  for (const [path, body] of [['/api/admin/limits', { limits: { text: 9999 } }], ['/api/admin/role', { userId: 1, role: 'mod' }], ['/api/admin/keys', { provider: 'groq', key: 'x' }], ['/api/admin/maintenance', { on: true }], ['/api/admin/faq', { question: 'a b', answer: 'c' }]]) {
+  for (const [path, body] of [['/api/admin/limits', { limits: { budget: 9999 } }], ['/api/admin/role', { userId: 1, role: 'mod' }], ['/api/admin/keys', { provider: 'groq', key: 'x' }], ['/api/admin/maintenance', { on: true }], ['/api/admin/faq', { question: 'a b', answer: 'c' }]]) {
     assert.equal((await c.json(path, body)).status, 404, path);
   }
   assert.equal((await c.call('/admin.js')).status, 404);
@@ -724,12 +729,12 @@ test('„Denken“ zählt als 2 Antworten und liefert Gedanken', async () => {
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 0, think: true, messages: [{ role: 'user', content: 'Warum ist der Himmel blau?' }], display: { text: 'Warum ist der Himmel blau?' } });
   const lines = (await res.text()).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   assert.ok(lines.some((l) => l.r), 'Gedanken kommen');
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, 2);
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, 2);
   const sum = await c.json('/api/chat/think-summary', { chatId: start.data.id, turn: 0, side: 0 });
   assert.equal(sum.status, 200);
   assert.ok(sum.data.summary.length > 5);
   await stream(c, start.data.id, 'Und ohne Denken?', 1);
-  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, 3);
+  assert.equal((await c.json('/api/chat/usage')).data.credits.used, 3);
 });
 
 test('Websuche: eigene Suche, nummerierte Quellen und [n] in der Antwort', async () => {
@@ -826,4 +831,45 @@ test('Startseite und Tour: eine KI, keine Modell-Auswahl für normale Nutzer', a
   assert.doesNotMatch(boot, /navigator\.language/);
   const en = await fetch(`${BASE}/api/auth/me`, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
   assert.match((await en.json()).error, /Nicht angemeldet/);
+});
+
+test('Tour: nur einmal direkt nach der Registrierung – nie wieder nach Login, auf neuem Gerät oder neu laden', async () => {
+  const c = await signUp('tour@example.com');
+  assert.equal((await c.json('/api/auth/me')).data.user.tour, true); // neues Konto
+  assert.equal((await c.json('/api/auth/tour-seen', {})).status, 200);
+  assert.equal((await c.json('/api/auth/me')).data.user.tour, undefined); // neu laden
+  const other = client(); // neues Gerät / neuer Login
+  assert.equal((await other.json('/api/auth/login', { email: 'tour@example.com', password: 'geheim1234' })).status, 200);
+  assert.equal((await other.json('/api/auth/me')).data.user.tour, undefined);
+  assert.equal((await client().json('/api/auth/tour-seen', {})).status, 401);
+  // die Tour hat keine Versionsnummer mehr in der App, die sie allen neu zeigt
+  const src = await (await fetch(`${BASE}/tour.js`)).text();
+  assert.doesNotMatch(src, /localStorage|VERSION/);
+});
+
+test('Credits: Admin stellt Tagesbudget und Kosten ein; zu teure Arbeit startet nicht', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const got = (await a.json('/api/admin/limits')).data;
+  assert.equal(got.limits.budget, 100);
+  assert.equal(got.costs.site, 14);
+  assert.ok(got.costFields.max);
+  assert.equal((await a.json('/api/admin/limits', { limits: { budget: 4 }, costs: { web: 2 } })).status, 200);
+  assert.equal((await a.json('/api/admin/limits', { costs: { max: 0 } })).status, 400);
+  try {
+    const u = await signUp('budget@example.com');
+    const start = await u.json('/api/chat/start', { mode: 'agent', title: 'W' });
+    // Webseite (14+) passt nicht ins Budget von 4 → ApeX baut sie nicht und sagt es
+    const r = await stream(u, start.data.id, 'Mach einfach eine Webseite für meinen Verein');
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Tagesbudget/);
+    assert.ok(!/```html/.test(r.text));
+    const usage = (await u.json('/api/chat/usage')).data;
+    assert.equal(usage.credits.used, 1);
+    assert.equal(usage.credits.left, 3);
+    const users = (await a.json('/api/admin/users?q=budget@')).data.users;
+    assert.deepEqual(users[0].credits, { used: 1, limit: 4 });
+  } finally {
+    await a.json('/api/admin/limits', { limits: { budget: 100 } });
+  }
 });

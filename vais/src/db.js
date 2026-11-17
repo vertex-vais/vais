@@ -81,6 +81,11 @@ try {
   await client.execute('ALTER TABLE users ADD COLUMN welcomed INTEGER');
   await client.execute('UPDATE users SET welcomed = 1');
 } catch { /* gibt es schon */ }
+// Einführungs-Tour nur ein einziges Mal – direkt nach der Registrierung. Alle, die es schon gibt, haben sie gesehen.
+try {
+  await client.execute('ALTER TABLE users ADD COLUMN tour_seen INTEGER');
+  await client.execute('UPDATE users SET tour_seen = 1');
+} catch { /* gibt es schon */ }
 // Geräte-Liste: wann angemeldet, zuletzt aktiv, welches Gerät (grob, z. B. „iPhone · Safari“)
 for (const col of ['created_at INTEGER', 'last_seen INTEGER', 'device TEXT']) {
   try { await client.execute(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* gibt es schon */ }

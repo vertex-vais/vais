@@ -491,6 +491,15 @@ async function imageWithFallback(prompt, signal, ctx) {
   return `Bild konnte nicht erstellt werden (${lastErr?.message ?? 'unbekannt'}).`;
 }
 
+// Credits: mitzählen, was wirklich passiert, und teure Arbeit nur starten, wenn der Nutzer sie sich leisten kann
+const note = (ctx, key, n = 1) => { if (ctx.work) ctx.work[key] = (ctx.work[key] ?? 0) + n; };
+export function canAfford(credits, key) {
+  if (!credits || credits.left === null || credits.left === undefined) return true;
+  return credits.left >= Number(credits.costs?.[key] ?? 0);
+}
+const noCredits = (credits, key, what) => `NICHT GENUG CREDITS: Der Nutzer hat heute nur noch ${credits.left} Credits, ${what} braucht etwa ${credits.costs?.[key] ?? '?'}. Mach das jetzt NICHT. Sag ihm kurz und freundlich, dass sein Tagesbudget dafür nicht mehr reicht und es um Mitternacht neue Credits gibt; hilf ihm stattdessen mit Text.`;
+const NO_IMAGES_LEFT = 'TAGESGRENZE FÜR BILDER ERREICHT: Der Nutzer hat heute schon so viele Bilder erstellt, wie pro Tag erlaubt sind. Erstelle KEIN Bild, sag ihm das kurz und freundlich (morgen geht es wieder) und beschreibe stattdessen, wie das Bild aussehen würde.';
+
 function runTool(name, args, signal, addSources, ctx) {
   switch (name) {
     case 'web_search': {
@@ -500,14 +509,17 @@ function runTool(name, args, signal, addSources, ctx) {
       list = list.slice(0, Math.max(0, ctx.budget.search));
       if (!list.length) return { steps: [], run: async () => BUDGET_DONE };
       ctx.budget.search -= list.length;
+      note(ctx, 'searches', list.length);
       return { steps: list.map((q) => ({ kind: 'search', text: q })), run: () => webSearch(list, signal, addSources) };
     }
-    case 'youtube_video': return { steps: [{ kind: 'video', text: String(args.url ?? '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) }], run: () => youtubeVideo(args.url, signal, addSources) };
+    case 'youtube_video': note(ctx, 'reads'); return { steps: [{ kind: 'video', text: String(args.url ?? '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) }], run: () => youtubeVideo(args.url, signal, addSources) };
     case 'wikipedia':
       if (ctx.budget.wiki-- <= 0) return { steps: [], run: async () => BUDGET_DONE };
+      note(ctx, 'searches');
       return { steps: [{ kind: 'wiki', text: String(args.query ?? '').slice(0, 80) }], run: () => wikipedia(args.query, args.language, signal, addSources) };
     case 'read_webpage': {
       if (ctx.budget.read-- <= 0) return { steps: [], run: async () => BUDGET_DONE };
+      note(ctx, 'reads');
       let label = String(args.url ?? '');
       try { const u = new URL(label); label = u.hostname + (u.pathname.length > 1 ? u.pathname : ''); } catch { /* egal */ }
       return { steps: [{ kind: 'read', text: label.slice(0, 80) }], run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
@@ -518,6 +530,8 @@ function runTool(name, args, signal, addSources, ctx) {
     case 'run_javascript': return { steps: [{ kind: 'calc', text: t('JavaScript ausführen', 'Running JavaScript') }], run: () => runJavaScriptText(args.code) };
     case 'generate_image': {
       if (ctx.images >= 2) return { steps: [], run: async () => 'Es wurden schon genug Bilder erstellt.' };
+      if (ctx.credits?.imagesLeft !== null && ctx.credits?.imagesLeft !== undefined && ctx.images >= ctx.credits.imagesLeft) return { steps: [], run: async () => NO_IMAGES_LEFT };
+      if (!canAfford(ctx.credits, 'image')) return { steps: [], run: async () => noCredits(ctx.credits, 'image', 'ein Bild') };
       ctx.images = (ctx.images ?? 0) + 1;
       return { steps: [{ kind: 'other', text: t(`Bild: ${String(args.prompt ?? '').slice(0, 60)}`, `Image: ${String(args.prompt ?? '').slice(0, 60)}`) }], run: () => imageWithFallback(String(args.prompt ?? ctx.question), signal, ctx) };
     }
@@ -529,9 +543,10 @@ function runTool(name, args, signal, addSources, ctx) {
       ctx.lastHtml = html;
       return { steps: [{ kind: 'check', text: t('Webseite', 'Website') }], run: async () => validateHtml(html) };
     }
-    case 'build_website': return {
+    case 'build_website': if (!canAfford(ctx.credits, 'site')) return { steps: [], run: async () => noCredits(ctx.credits, 'site', 'eine Webseite') }; return {
       steps: [],
       run: async () => {
+        note(ctx, 'sites');
         const out = await buildWebsite({ brief: String(args.brief ?? ctx.question), kind: args.kind, signal, onStep: ctx.onStep, validate: validateHtml });
         ctx.lastHtml = out.html;
         return out.report;
@@ -542,6 +557,7 @@ function runTool(name, args, signal, addSources, ctx) {
       run: async () => {
         const page = ctx.lastHtml || ctx.pageHtml;
         if (!page) return 'In diesem Gespräch gibt es noch keine Webseite. Baue zuerst eine mit build_website.';
+        note(ctx, 'siteEdits');
         const out = await editWebsite({ html: page, change: String(args.change ?? ctx.question), signal, onStep: ctx.onStep, validate: validateHtml });
         ctx.lastHtml = out.html;
         return out.report;
@@ -707,15 +723,18 @@ export const isEmptyAnswer = (content) => !REACT_TAG.test(String(content ?? ''))
 const hasImagesIn = (messages) => (messages ?? []).some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null }) {
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
+// work: hier trägt ApeX ein, was es wirklich gemacht hat (für die Credits-Abrechnung)
+// credits: { left, costs, imagesLeft } – was der Nutzer heute noch hat (left/imagesLeft null = unbegrenzt)
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null }) {
+  if (demoMode) return demoAgent({ work, credits, messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel('agent');
   if (!model) throw new Error(t('ApeX ist gerade nicht erreichbar. Versuch es gleich noch einmal.', 'ApeX is not reachable right now. Please try again shortly.'));
 
   const addSources = sourceCleaner(onSources);
   const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, onImage, images: 0, ledger };
+  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, onImage, images: 0, ledger, work, credits };
+  const afford = (key) => canAfford(credits, key);
   // Die neueste Webseite aus dem Verlauf merken und im Gespräch nur kurz erwähnen (spart sehr viele Tokens);
   // geändert wird sie mit edit_website direkt auf dem Server
   for (let i = seeing.length - 1; i >= 0; i--) {
@@ -746,16 +765,16 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   // DeepSearch / Heavy: automatisch bei Recherche- bzw. schweren Fragen (nicht bei Webseiten, Links, Erinnerungen)
   const write = (text) => finish(text);
   const special = !ctx.pageHtml && !(inbox?.length) && ctx.question && !hasImagesIn(messages);
-  if (special && isResearch(ctx.question)) {
+  if (special && isResearch(ctx.question) && afford('deep')) {
     try {
-      if (await deepResearch({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), addSources, write })) return undefined;
+      if (await deepResearch({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), addSources, write })) { work.deep = true; return undefined; }
     } catch (err) {
       if (signal?.aborted) throw err;
       console.error('DeepSearch fehlgeschlagen, normaler Ablauf:', err.message);
     }
-  } else if (special && isHard(ctx.question)) {
+  } else if (special && isHard(ctx.question) && afford('heavy')) {
     try {
-      if (await heavyAnswer({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), write })) return undefined;
+      if (await heavyAnswer({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), write })) { work.heavy = true; return undefined; }
     } catch (err) {
       if (signal?.aborted) throw err;
       console.error('Heavy fehlgeschlagen, normaler Ablauf:', err.message);
@@ -769,6 +788,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   async function ask(extra = {}) {
     for (let attempt = 0; attempt < 9; attempt++) {
       try {
+        work.calls = (work.calls ?? 0) + 1;
         return await complete({ model: current.id, messages: convo, signal, ...extra });
       } catch (err) {
         if (signal?.aborted) throw err;
@@ -826,6 +846,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     }
 
     convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
+    work.rounds = (work.rounds ?? 0) + 1;
     // Alle Werkzeuge dieses Schritts gleichzeitig ausführen
     const tools = calls.map((call) => {
       let args = {};
@@ -852,7 +873,8 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder, planFirst, inbox }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder, planFirst, inbox, work = {}, credits = null }) {
+  work.calls = 1;
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
@@ -884,6 +906,8 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
   await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue die Seite Schritt für Schritt: Entwurf, Design-System, Abschnitte, Prüfung.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
   if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }
   if (site) {
+    if (!canAfford(credits, 'site')) return emitText(`**ApeX (Demo)** – für eine Webseite reicht dein Tagesbudget heute nicht mehr (noch ${credits.left} Credits). Um Mitternacht gibt es neue.`, onText, signal);
+    work.sites = 1;
     onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
     await sleep(300); onStep({ kind: 'draft', text: '3 Abschnitte: nav, zaehler, footer' });
     for (const id of ['nav', 'zaehler', 'footer']) { await sleep(250); onStep({ kind: 'section', text: `Abschnitt „${id}“` }); }
@@ -900,6 +924,7 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
     await sleep(300);
     return emitText('**ApeX (Demo)** – hier als Diagramm:\n\n```chart\n{"type":"bar","title":"Einwohner der größten Städte","unit":"Mio.","labels":["Berlin","Hamburg","München","Köln"],"series":[{"name":"2023","data":[3.76,1.89,1.51,1.08]},{"name":"2013","data":[3.42,1.75,1.41,1.02]}]}\n```\n\nUnd zum Nachrechnen in Python:\n\n```python\nstaedte = {"Berlin": 3.76, "Hamburg": 1.89, "München": 1.51, "Köln": 1.08}\nfor name, mio in staedte.items():\n    print(f"{name}: {mio} Mio.")\nprint("Summe:", round(sum(staedte.values()), 2), "Mio.")\n```', onText, signal, 8, 6);
   }
+  work.searches = 3; work.reads = 1; work.rounds = 2;
   await sleep(400); onStep({ kind: 'search', text: q.slice(0, 60) });
   onStep({ kind: 'search', text: `${q.slice(0, 40)} aktuell` });
   onStep({ kind: 'wiki', text: q.split(/\s+/).slice(-1)[0] || 'ApeX' });

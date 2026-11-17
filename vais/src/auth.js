@@ -436,14 +436,23 @@ auth.get('/google/callback', async (req, res) => {
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
-  const welcomed = (await get('SELECT welcomed FROM users WHERE id = ?', user.id))?.welcomed;
-  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined, testMode: isStaff(user) ? inTestMode(user) : undefined, unlimited: isUnlimited(user) || undefined, welcome: !welcomed || undefined } });
+  const flags = await get('SELECT welcomed, tour_seen FROM users WHERE id = ?', user.id);
+  const welcomed = flags?.welcomed;
+  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined, testMode: isStaff(user) ? inTestMode(user) : undefined, unlimited: isUnlimited(user) || undefined, welcome: !welcomed || undefined, tour: !flags?.tour_seen || undefined } });
 }));
 // Willkommens-Paket gesehen → nie wieder zeigen (auf keinem Gerät)
 auth.post('/welcomed', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
   await run('UPDATE users SET welcomed = 1 WHERE id = ?', user.id);
+  res.json({ ok: true });
+}));
+
+// Einführungs-Tour gezeigt → nie wieder automatisch (kein Gerät, kein neuer Login, keine neue App-Version)
+auth.post('/tour-seen', wrap(async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  await run('UPDATE users SET tour_seen = 1 WHERE id = ?', user.id);
   res.json({ ok: true });
 }));
 

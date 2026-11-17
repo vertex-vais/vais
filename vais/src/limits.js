@@ -1,24 +1,77 @@
-// Tageslimit pro Nutzer: jeder bekommt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und ApeX-Aufträge.
-// So bleibt für alle genug übrig. Alles im Admin-Bereich einstellbar.
+// Tagesbudget pro Nutzer: jeder bekommt pro Tag gleich viele Credits. Was eine Antwort kostet, hängt davon ab,
+// wie viel ApeX dafür wirklich gearbeitet hat (Suchen, Bilder, Webseiten, viele Schritte …) – so reicht es für alle.
+// Budget, Kosten und Schutz-Grenzen sind im Admin-Bereich einstellbar. Neu um Mitternacht (deutsche Zeit).
 import { get, run, all, getSetting, setSetting } from './db.js';
 import { t } from './i18n.js';
 import { HttpError } from './auth.js';
 import { isUnlimited } from './config.js';
 
-// Wie viele Antworten jeder pro Tag bekommt – getrennt nach Art (keine Punkte mehr)
 export const LIMIT_FIELDS = {
-  text: { min: 0, max: 100000, def: Number(process.env.USER_DAILY_ANSWERS) || 100 }, // normale Antworten (Text/Code, Übersetzer, Team-KI)
-  web: { min: 0, max: 100000, def: 30 }, // Antworten mit Websuche
-  image: { min: 0, max: 100000, def: 20 }, // Bilder
-  agent: { min: 0, max: 100000, def: 15 }, // ApeX-Aufträge
+  budget: { min: 0, max: 1000000, def: Number(process.env.USER_DAILY_CREDITS) || 100 }, // Credits pro Tag
+  image: { min: 0, max: 100000, def: 20 }, // Sicherheits-Grenze: höchstens so viele Bilder pro Tag
   paidDaily: { min: 0, max: 10000, def: Number(process.env.PAID_DAILY_LIMIT ?? 20) }, // Premium-Antworten pro Tag
-  burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Antworten in 5 Minuten
+  burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Anfragen in 5 Minuten
   maxChats: { min: 0, max: 1000, def: 10 }, // so viele gespeicherte Chats pro Person (0 = unbegrenzt)
 };
-export const KINDS = ['text', 'web', 'image', 'agent'];
-const KIND_NAME = {
-  text: () => t('Antworten', 'answers'), web: () => t('Websuchen', 'web searches'), image: () => t('Bilder', 'images'), agent: () => t('ApeX-Aufträge', 'ApeX tasks'),
+// Was welche Arbeit kostet (Credits). Grundpreis + Zuschläge, gedeckelt pro Auftrag.
+export const COST_FIELDS = {
+  answer: { min: 0, max: 100, def: 1 }, // jede Antwort (Grundpreis)
+  long: { min: 0, max: 100, def: 1 }, // Zuschlag: lange oder gründlich durchdachte Antwort
+  web: { min: 0, max: 100, def: 2 }, // Zuschlag: Websuche
+  webMore: { min: 0, max: 100, def: 1 }, // je weitere Suche / gelesene Seite
+  deep: { min: 0, max: 200, def: 8 }, // Zuschlag: Tiefe Recherche (viele Quellen)
+  image: { min: 0, max: 200, def: 4 }, // je Bild
+  heavy: { min: 0, max: 200, def: 9 }, // Zuschlag: schwere Frage, mehrere Durchgänge mit Gegenprüfung
+  site: { min: 0, max: 500, def: 14 }, // je gebaute Webseite / App
+  siteEdit: { min: 0, max: 500, def: 4 }, // je Änderung an einer Webseite
+  step: { min: 0, max: 100, def: 1 }, // je weiterer Arbeitsschritt ab dem 4.
+  max: { min: 1, max: 1000, def: 30 }, // höchstens so viel pro Auftrag
 };
+export const FREE_STEPS = 3;
+const LONG_CHARS = 3000;
+
+// Was hat eine Antwort gekostet? work = das, was die Pipeline wirklich gemacht hat.
+// { answered, chars, reasoning, think, calls, searches, reads, deep, heavy, images, sites, siteEdits, rounds }
+export function workCost(work = {}, C = defaultCosts()) {
+  const n = (x) => Math.max(0, Number(x) || 0);
+  if (!work.answered && !n(work.images)) return 0;
+  let cost = n(C.answer);
+  const long = work.reasoning || work.think || n(work.chars) > LONG_CHARS || n(work.calls) >= 3;
+  if (long) cost += n(C.long);
+  const looked = n(work.searches) + n(work.reads);
+  if (work.deep) cost += n(C.deep);
+  else if (looked > 0) cost += n(C.web) + n(C.webMore) * (looked - 1);
+  if (work.heavy) cost += n(C.heavy);
+  cost += n(C.image) * n(work.images);
+  cost += n(C.site) * n(work.sites) + n(C.siteEdit) * n(work.siteEdits);
+  cost += n(C.step) * Math.max(0, n(work.rounds) - FREE_STEPS);
+  return Math.max(Math.min(cost, n(C.max) || cost), 0);
+}
+export const defaultCosts = () => Object.fromEntries(Object.entries(COST_FIELDS).map(([k, f]) => [k, f.def]));
+
+let costCache = null;
+let costAt = 0;
+export async function costSettings() {
+  if (costCache && Date.now() - costAt < 30_000) return costCache;
+  let saved = {};
+  try { saved = JSON.parse(await getSetting('credit_costs', '{}')) || {}; } catch { saved = {}; }
+  costCache = Object.fromEntries(Object.entries(COST_FIELDS).map(([k, f]) => [k, Number.isFinite(saved[k]) ? saved[k] : f.def]));
+  costAt = Date.now();
+  return costCache;
+}
+export async function saveCostSettings(input) {
+  const next = { ...(await costSettings()) };
+  for (const [k, f] of Object.entries(COST_FIELDS)) {
+    if (input?.[k] === undefined) continue;
+    const v = Math.round(Number(input[k]));
+    if (!Number.isFinite(v) || v < f.min || v > f.max) throw new HttpError(400, t(`Ungültiger Wert für „${k}“ (${f.min}–${f.max}).`, `Invalid value for “${k}” (${f.min}–${f.max}).`));
+    next[k] = v;
+  }
+  await setSetting('credit_costs', JSON.stringify(next));
+  costCache = next;
+  costAt = Date.now();
+  return next;
+}
 
 let cached = null;
 let cachedAt = 0;
@@ -67,64 +120,98 @@ async function userFactor(user) {
 }
 export const scaled = (base, factor) => (factor === null ? null : Math.round(base * factor));
 
+// Gleiche Tabelle wie früher (keine Migration nötig): kind = 'credits' (verbrauchte Credits) bzw. 'image' (Anzahl Bilder)
 await run(`CREATE TABLE IF NOT EXISTS usage_kinds (
   user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day, kind)
 )`);
+export const KINDS = ['credits', 'image'];
 
 async function countsToday(userId) {
-  const rows = await all('SELECT kind, n FROM usage_kinds WHERE user_id = ? AND day = ?', userId, dayKey());
+  const rows = await all("SELECT kind, n FROM usage_kinds WHERE user_id = ? AND day = ? AND kind IN ('credits', 'image')", userId, dayKey());
   return Object.fromEntries(KINDS.map((k) => [k, Number(rows.find((r) => r.kind === k)?.n ?? 0)]));
 }
+const add = (userId, kind, n) => run('INSERT INTO usage_kinds (user_id, day, kind, n) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, day, kind) DO UPDATE SET n = MAX(0, n + excluded.n)', userId, dayKey(), kind, n);
 
-// Verbrauch heute je Art, mit Prozent (0–100) – für die Statistik
-export async function usageOf(user) {
+// Budget heute: limit/left = null → unbegrenzt
+export async function budgetOf(user) {
   const [L, factor, used] = await Promise.all([limitSettings(), userFactor(user), countsToday(user.id)]);
-  const kinds = Object.fromEntries(KINDS.map((k) => {
-    const max = scaled(L[k], factor);
-    return [k, { used: used[k], limit: max, percent: max === null ? 0 : max === 0 ? 100 : Math.min(100, Math.round((used[k] / max) * 100)) }];
-  }));
+  const limit = scaled(L.budget, factor);
+  const imageLimit = scaled(L.image, factor);
   return {
     unlimited: factor === null,
-    kinds,
-    percent: Math.max(...Object.values(kinds).map((x) => (x.limit === null ? 0 : x.percent))),
-    resetsAt: nextReset(),
+    limit,
+    used: used.credits,
+    left: limit === null ? null : Math.max(0, limit - used.credits),
+    imageLimit,
+    imagesUsed: used.image,
+    imagesLeft: imageLimit === null ? null : Math.max(0, imageLimit - used.image),
   };
 }
 
-// Eine Antwort zählen – oder ablehnen, wenn für diese Art heute nichts mehr übrig ist
-// cost: wie viele Antworten das zählt (z. B. „Denken“ = 2)
-export async function charge(user, kind, cost = 1) {
-  if (!KINDS.includes(kind)) return null;
-  const [L, factor] = await Promise.all([limitSettings(), userFactor(user)]);
-  const max = scaled(L[kind], factor);
-  if (max !== null) {
-    const used = (await countsToday(user.id))[kind];
-    if (cost > 1 && used < max && used + cost > max) {
-      throw new HttpError(429, t(`„Denken“ zählt als ${cost} Antworten – du hast heute nur noch ${max - used}. Schalte „Denken“ aus, dann geht es weiter.`, `“Think” counts as ${cost} answers – you only have ${max - used} left today. Turn “Think” off to continue.`), { usage: true });
-    }
-    if (used >= max) {
-      const other = kind === 'text' ? '' : t(' Normale Antworten gehen noch.', ' Normal answers still work.');
-      throw new HttpError(429, max === 0
-        ? t(`${KIND_NAME[kind]()[0].toUpperCase()}${KIND_NAME[kind]().slice(1)} sind für dich gerade nicht freigeschaltet.`, `${KIND_NAME[kind]()} are not enabled for you right now.`)
-        : t(`Du hast heute alle ${max} ${KIND_NAME[kind]()} genutzt (100 %). Um Mitternacht geht es weiter.${other}`, `You used all ${max} ${KIND_NAME[kind]()} for today (100 %). It resets at midnight.${other}`), { usage: true });
-    }
-  }
-  await run('INSERT INTO usage_kinds (user_id, day, kind, n) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, day, kind) DO UPDATE SET n = n + excluded.n', user.id, dayKey(), kind, cost);
-  return kind;
+// Verbrauch heute – für „Meine Statistik“ und die Warnung bei wenig Credits
+export async function usageOf(user) {
+  const [b, costs] = await Promise.all([budgetOf(user), costSettings()]);
+  const percent = b.limit === null ? 0 : b.limit === 0 ? 100 : Math.min(100, Math.round((b.used / b.limit) * 100));
+  return {
+    unlimited: b.unlimited,
+    credits: { used: b.used, limit: b.limit, left: b.left, percent },
+    images: { used: b.imagesUsed, limit: b.imageLimit },
+    percent,
+    resetsAt: nextReset(),
+    costs,
+  };
 }
-// Hat das Modell gar nicht geantwortet, zählt es nicht
-export async function refund(user, kind, cost = 1) {
-  if (!KINDS.includes(kind)) return;
-  await run('UPDATE usage_kinds SET n = MAX(0, n - ?) WHERE user_id = ? AND day = ? AND kind = ?', cost, user.id, dayKey(), kind).catch(() => {});
+
+const outOfCredits = (b, need) => new HttpError(429, b.limit === 0
+  ? t('ApeX ist für dein Konto gerade nicht freigeschaltet.', 'ApeX is not enabled for your account right now.')
+  : b.left > 0
+    ? t(`Dafür brauchst du mindestens ${need} Credits – du hast heute nur noch ${b.left}. Um Mitternacht gibt es neue.`, `This needs at least ${need} credits – you only have ${b.left} left today. New ones arrive at midnight.`)
+    : t(`Dein Tagesbudget ist aufgebraucht (${b.limit} von ${b.limit} Credits). Um Mitternacht gibt es neue Credits.`, `Your daily budget is used up (${b.limit} of ${b.limit} credits). New credits arrive at midnight.`),
+{ usage: true, credits: { left: b.left, limit: b.limit } });
+
+// Vorab: mindestens „amount“ Credits reservieren (gegen Doppelklicks). Abgerechnet wird am Ende mit settle().
+// images: so viele Bilder sollen entstehen (Sicherheits-Grenze pro Tag)
+export async function reserve(user, amount = 1, { images = 0 } = {}) {
+  const need = Math.max(0, Math.round(Number(amount) || 0));
+  const b = await budgetOf(user);
+  if (b.limit !== null && (b.left < need || (need === 0 && b.left <= 0))) throw outOfCredits(b, need);
+  if (images && b.imagesLeft !== null && b.imagesLeft < images) {
+    throw new HttpError(429, b.imageLimit === 0
+      ? t('Bilder sind für dich gerade nicht freigeschaltet.', 'Images are not enabled for you right now.')
+      : t(`Du hast heute schon ${b.imageLimit} Bilder erstellt – das ist die Grenze pro Tag. Um Mitternacht geht es weiter.`, `You already created ${b.imageLimit} images today – that is the daily maximum. It resets at midnight.`), { usage: true });
+  }
+  if (need) await add(user.id, 'credits', need);
+  return need;
+}
+// Am Ende: tatsächliche Kosten abrechnen (Differenz zur Reservierung). Nie unter 0 Credits übrig.
+// Gibt zurück, was wirklich abgezogen wurde.
+export async function settle(user, reserved, actual) {
+  const r = Math.max(0, Number(reserved) || 0);
+  const want = Math.max(0, Math.round(Number(actual) || 0));
+  if (want === r) return want;
+  if (want < r) { await add(user.id, 'credits', want - r); return want; }
+  const b = await budgetOf(user);
+  const extra = b.left === null ? want - r : Math.min(want - r, b.left);
+  if (extra > 0) await add(user.id, 'credits', extra);
+  return r + extra;
+}
+// Hat ApeX gar nicht geantwortet, kostet es nichts
+export async function refund(user, amount) {
+  const n = Math.max(0, Number(amount) || 0);
+  if (!user || !n) return;
+  await add(user.id, 'credits', -n).catch(() => {});
+}
+export async function countImages(user, n) {
+  if (n > 0) await add(user.id, 'image', n).catch(() => {});
 }
 export async function resetUsage(userId) {
   await run('DELETE FROM usage_kinds WHERE user_id = ? AND day = ?', userId, dayKey());
   await run('DELETE FROM usage WHERE user_id = ? AND day = ?', userId, dayKey()).catch(() => {});
 }
-// Für den Admin: Verbrauch heute je Nutzer → { text, web, image, agent }
+// Für den Admin: Verbrauch heute je Nutzer → { credits, image }
 export async function usageMap() {
-  const rows = await all('SELECT user_id, kind, n FROM usage_kinds WHERE day = ?', dayKey());
+  const rows = await all("SELECT user_id, kind, n FROM usage_kinds WHERE day = ? AND kind IN ('credits', 'image')", dayKey());
   const map = new Map();
   for (const r of rows) {
     const id = Number(r.user_id);
