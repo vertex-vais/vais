@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { t } from './i18n.js';
 import { getSetting, setSetting } from './db.js';
 import { keysForUser, noteFailureBySecret, peekProviderKey, getActiveProviderKey, cachedKeys, isAdminOnlyProvider } from './providerKeys.js';
+import { publicOrigin } from './canonical.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
 const IDLE_TIMEOUT = 75_000; // so lange darf ein Modell bis zum ersten Lebenszeichen brauchen
@@ -608,7 +609,7 @@ export async function streamChat({ model, messages, signal, think = false, onTex
   const headersFor = (key) => ({
     Authorization: `Bearer ${key}`,
     'Content-Type': 'application/json',
-    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
+    ...(provider === 'openrouter' ? { 'HTTP-Referer': publicOrigin() || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
   });
   // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
   const idle = new AbortController();
@@ -793,7 +794,7 @@ export function tempImage(token) {
   return hit;
 }
 function shareTemp(dataUrl) {
-  const base = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+  const base = publicOrigin();
   const m = String(dataUrl).match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
   if (!base || !m) return null;
   for (const [k, v] of tempImages) if (v.until < Date.now()) tempImages.delete(k);
@@ -1010,7 +1011,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
+      ...(provider === 'openrouter' ? { 'HTTP-Referer': publicOrigin() || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
     },
     body: JSON.stringify({
       model: upstream,

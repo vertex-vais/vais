@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { get, run, all, purgeChats } from './db.js';
 import { t, lang } from './i18n.js';
 import { isAdmin, isMod } from './config.js';
+import { publicOrigin } from './canonical.js';
 import { sendCode } from './mailer.js';
 import { signupGuard, codeGuard } from './guard.js';
 
@@ -368,7 +369,7 @@ auth.post('/delete', wrap(async (req, res) => {
 // ── Anmelden mit Google (nur aktiv, wenn GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET gesetzt sind) ──
 const GOOGLE = { id: process.env.GOOGLE_CLIENT_ID?.trim(), secret: process.env.GOOGLE_CLIENT_SECRET?.trim() };
 const googleOn = () => !!(GOOGLE.id && GOOGLE.secret);
-const baseUrl = (req) => (process.env.APP_URL?.trim().replace(/\/$/, '') || `${req.protocol}://${req.get('host')}`);
+const baseUrl = (req) => publicOrigin(req);
 const STATE_COOKIE = 'vais_g_state';
 
 auth.get('/config', (req, res) => res.json({ google: googleOn() }));
