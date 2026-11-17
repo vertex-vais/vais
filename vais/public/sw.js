@@ -2,7 +2,7 @@
 // - macht ApeX als App installierbar
 // - zeigt „ApeX wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v7';
+const CACHE = 'vais-v8';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/apex-mark.png', '/favicon-32-v3.png', '/icons/apex-192-v3.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
 const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/apex-512-v3.png'];
@@ -30,6 +30,11 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+// Render antwortet mit einem nackten „Not Found“ (Header x-render-routing: no-server), solange
+// gerade kein Server bereitsteht (z. B. kurz während eines Updates oder Neustarts).
+// Das ist kein echter Fehler der Seite → wie beim Aufwachen die Warte-Seite zeigen, die neu lädt.
+const renderNoServer = (res) => res.status === 404 && (res.headers.get('x-render-routing') || '').startsWith('no-server');
+
 const wakingPage = async () => (await caches.match('/waking.html')) || new Response('ApeX …', { headers: { 'Content-Type': 'text/html' } });
 
 self.addEventListener('fetch', (event) => {
@@ -55,7 +60,7 @@ self.addEventListener('fetch', (event) => {
       const timer = new Promise((resolve) => setTimeout(() => resolve('slow'), WAKE_AFTER));
       try {
         const first = await Promise.race([network, timer]);
-        if (first !== 'slow') return first;
+        if (first !== 'slow') return renderNoServer(first) ? wakingPage() : first;
         network.catch(() => {}); // läuft im Hintergrund weiter und weckt den Server
         return wakingPage();
       } catch {

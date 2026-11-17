@@ -44,10 +44,11 @@ test('Telegram-Webhook nutzt CANONICAL_URL vor RENDER_EXTERNAL_URL', () => {
 function fakeRes() {
   const res = { statusCode: 200, location: null, headers: {} };
   res.redirect = (code, url) => { res.statusCode = code; res.location = url; return res; };
+  res.set = (k, v) => { res.headers[k.toLowerCase()] = v; return res; };
   return res;
 }
 
-test('Middleware: 301 nur bei abweichendem Host und GET/HEAD', () => {
+test('Middleware: 302 (nicht dauerhaft) nur bei abweichendem Host und GET/HEAD', () => {
   const prev = process.env.CANONICAL_URL;
   process.env.CANONICAL_URL = 'https://apex-35m7.onrender.com';
   const run = (req) => {
@@ -60,14 +61,15 @@ test('Middleware: 301 nur bei abweichendem Host und GET/HEAD', () => {
     const base = { method: 'GET', path: '/login', originalUrl: '/login', get: () => 'vais-dvvk.onrender.com' };
     const moved = run(base);
     assert.equal(moved.next, false);
-    assert.equal(moved.res.statusCode, 301);
+    assert.equal(moved.res.statusCode, 302);
+    assert.equal(moved.res.headers['cache-control'], 'no-store');
     assert.equal(moved.res.location, 'https://apex-35m7.onrender.com/login');
 
     const withQuery = run({ ...base, path: '/s/abc', originalUrl: '/s/abc?x=1&y=2' });
     assert.equal(withQuery.res.location, 'https://apex-35m7.onrender.com/s/abc?x=1&y=2');
 
     const head = run({ ...base, method: 'HEAD' });
-    assert.equal(head.res.statusCode, 301);
+    assert.equal(head.res.statusCode, 302);
 
     const same = run({ ...base, get: () => 'apex-35m7.onrender.com' });
     assert.equal(same.next, true);
@@ -160,7 +162,10 @@ function call(path, { method = 'GET', host = 'vais-dvvk.onrender.com', headers =
 
 test('Live-Server: alter Host wird umgeleitet, kanonischer nicht', async () => {
   const res = await call('/login?next=1');
-  assert.equal(res.status, 301);
+  // 302 + no-store: Safari darf sich die Umleitung nicht dauerhaft merken (sonst bleibt man
+  // nach einem Adresswechsel auf einer toten Render-Adresse mit „Not Found“ hängen)
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('location'), `${CANONICAL}/login?next=1`);
 
   const same = await call('/login', { host: 'apex-35m7.onrender.com' });
@@ -181,12 +186,33 @@ test('Live-Server: healthz, Status und Telegram werden nicht umgeleitet', async 
   assert.equal(status.headers.get('location'), null);
 
   const tg = await call('/api/telegram/testsecret');
-  assert.notEqual(tg.status, 301);
+  assert.notEqual(tg.status, 302);
 
   const post = await call('/api/auth/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: 'http://vais-dvvk.onrender.com', 'Content-Length': String(Buffer.byteLength('{"email":"a@b.de"}')) },
     body: '{"email":"a@b.de"}',
   });
-  assert.notEqual(post.status, 301);
+  assert.notEqual(post.status, 302);
+});
+
+test('Nach dem Login: alter Host leitet / zur kanonischen App weiter (kein dauerhafter 301)', async () => {
+  const res = await call('/');
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('location'), `${CANONICAL}/`);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+});
+
+test('Service Worker: Render-„Not Found“ (no-server) zeigt die Warte-Seite statt der nackten Fehlerseite', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
+  const fn = src.match(/const renderNoServer = (\(res\) => [^;]+);/);
+  assert.ok(fn, 'renderNoServer fehlt');
+  const renderNoServer = eval(fn[1]);
+  const mk = (status, routing) => ({ status, headers: new Headers(routing ? { 'x-render-routing': routing } : {}) });
+  assert.equal(renderNoServer(mk(404, 'no-server')), true);
+  assert.equal(renderNoServer(mk(404)), false); // echte 404 der App bleibt
+  assert.equal(renderNoServer(mk(200, 'no-server')), false);
+  assert.match(src, /renderNoServer\(first\) \? wakingPage\(\) : first/);
+  assert.match(src, /const CACHE = 'vais-v8'/);
 });
