@@ -2,7 +2,7 @@
 // - macht ApeX als App installierbar
 // - zeigt „ApeX wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v11';
+const CACHE = 'vais-v12';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/apex-mark.png', '/favicon-32-v3.png', '/icons/apex-192-v3.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
 const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/apex-512-v3.png'];
