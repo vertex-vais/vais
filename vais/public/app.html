@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="description" content="Use and compare the best AI models for free – chat, images, web search and Agent X, all in one place.">
+  <meta name="description" content="ApeX by VERTEX – one AI for chat, research, images and code. Free.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ApeX">
-  <meta property="og:title" content="ApeX – The best AI models, free">
-  <meta property="og:description" content="Use and compare the best AI models for free – chat, images, web search and Agent X, all in one place.">
+  <meta property="og:title" content="ApeX – one AI by VERTEX">
+  <meta property="og:description" content="ApeX by VERTEX – one AI for chat, research, images and code. Free.">
   <meta property="og:url" content="__ORIGIN__/">
   <meta property="og:image" content="__ORIGIN__/og.jpg?v=4">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="ApeX – the best AI models, free, in one place">
+  <meta property="og:image:alt" content="ApeX by VERTEX – one AI for everything">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="ApeX – The best AI models, free">
-  <meta name="twitter:description" content="Use and compare the best AI models for free – chat, images, web search and Agent X, all in one place.">
+  <meta name="twitter:title" content="ApeX – one AI by VERTEX">
+  <meta name="twitter:description" content="ApeX by VERTEX – one AI for chat, research, images and code. Free.">
   <meta name="twitter:image" content="__ORIGIN__/og.jpg?v=4">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>ApeX</title>
@@ -87,8 +87,10 @@
     <div class="home-stars" aria-hidden="true"></div>
     <main class="stage" id="stage">
       <section class="home" id="home">
-        <h1 class="home-title" data-en="What would you like to do?">Was möchtest du tun?</h1>
-        <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder models answer until an API key is configured.">Demo-Modus: Es antworten Platzhalter-Modelle, bis ein API-Schlüssel eingetragen ist.</p>
+        <img class="home-mark" src="/icons/apex-mark.png" alt="" width="64" height="64">
+        <h1 class="home-title" data-en="How can I help?">Wie kann ich helfen?</h1>
+        <p class="home-sub" data-en="ApeX by VERTEX – chat, research, images and code in one AI.">ApeX von VERTEX – Chat, Recherche, Bilder und Code in einer KI.</p>
+        <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder answers until the setup is complete.">Demo-Modus: Platzhalter-Antworten, bis die Einrichtung fertig ist.</p>
       </section>
       <section class="thread" id="thread" aria-live="polite" hidden></section>
       <section class="board stats" id="stats" hidden>
@@ -97,18 +99,20 @@
           <p class="board-sub" id="stats-sub"></p>
           <div class="usage-card" id="usage-card" hidden></div>
           <div class="stat-grid" id="stat-grid"></div>
-          <h2 class="stat-h" data-en="How you use ApeX">So nutzt du ApeX</h2>
-          <div class="stat-modes" id="stat-modes"></div>
-          <h2 class="stat-h" data-en="Your battle winners">Deine Battle-Sieger</h2>
-          <ol class="board-list" id="stat-fav"></ol>
-          <h2 class="stat-h" data-en="Most used models">Meistgenutzte Modelle</h2>
-          <ol class="board-list" id="stat-used"></ol>
+          <div class="staff-only">
+            <h2 class="stat-h" data-en="Modules used (admin)">Genutzte Module (Admin)</h2>
+            <div class="stat-modes" id="stat-modes"></div>
+            <h2 class="stat-h" data-en="Your battle winners">Deine Battle-Sieger</h2>
+            <ol class="board-list" id="stat-fav"></ol>
+            <h2 class="stat-h" data-en="Most used models">Meistgenutzte Modelle</h2>
+            <ol class="board-list" id="stat-used"></ol>
+          </div>
         </div>
       </section>
       <section class="board konto" id="konto" hidden>
         <div class="board-inner">
           <h1 class="board-title" data-en="Account balance">Kontostand</h1>
-          <p class="board-sub" data-en="Enter what comes in and goes out. Agent X can read it and add entries for you.">Trag ein, was reinkommt und rausgeht. Agent X kann es lesen und auf Wunsch für dich eintragen.</p>
+          <p class="board-sub" data-en="Enter what comes in and goes out. ApeX can read it and add entries for you.">Trag ein, was reinkommt und rausgeht. ApeX kann es lesen und auf Wunsch für dich eintragen.</p>
           <div class="konto-balance"><small data-en="Current balance">Aktueller Kontostand</small><b id="konto-balance">–</b></div>
           <form class="konto-form" id="konto-form" autocomplete="off">
             <input class="input" id="konto-amount" inputmode="decimal" placeholder="Betrag, z. B. 12,50" data-en-placeholder="Amount, e.g. 12.50" aria-label="Betrag" data-en-aria-label="Amount">
@@ -239,7 +243,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/></svg>
         <span data-en="My stats">Meine Statistik</span>
       </button>
-      <button class="drawer-item" id="d-board">
+      <button class="drawer-item staff-only" id="d-board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
         <span data-en="Leaderboard">Bestenliste</span>
       </button>
@@ -485,12 +489,12 @@
             <button class="btn" type="submit" data-en="Save">Speichern</button>
           </form>
           <label class="set-switch">
-            <span><b data-en="Agent X memory">Gedächtnis von Agent X</b><small data-en="Agent X remembers things about you (e.g. your name or hobbies) for later chats.">Agent X merkt sich Dinge über dich (z. B. Name, Hobbys) für spätere Chats.</small></span>
+            <span><b data-en="ApeX memory">Gedächtnis von ApeX</b><small data-en="ApeX remembers things about you (e.g. your name or hobbies) for later chats.">ApeX merkt sich Dinge über dich (z. B. Name, Hobbys) für spätere Chats.</small></span>
             <input type="checkbox" id="set-memory-on" role="switch">
           </label>
           <ul class="mem-list" id="set-memories"></ul>
           <label class="set-switch">
-            <span><b data-en="Agent X: plan first">Agent X: erst ein Plan</b><small data-en="For big tasks Agent X first shows a short plan that you confirm or change.">Bei großen Aufgaben zeigt Agent X zuerst einen kurzen Plan, den du bestätigst oder änderst.</small></span>
+            <span><b data-en="ApeX: plan first">ApeX: erst ein Plan</b><small data-en="For big tasks ApeX first shows a short plan that you confirm or change.">Bei großen Aufgaben zeigt ApeX zuerst einen kurzen Plan, den du bestätigst oder änderst.</small></span>
             <input type="checkbox" id="set-plan-on" role="switch" checked>
           </label>
           <button type="button" class="btn ghost-btn" id="set-memory-clear" hidden data-en="Forget everything">Alles vergessen</button>
@@ -498,7 +502,7 @@
 
         <section class="set-group" id="set-push-group">
           <h3 data-en="Reminders">Erinnerungen</h3>
-          <p class="set-hint" id="set-push-text" data-en="Tell Agent X “Remind me tomorrow at 8 about maths” – the reminder arrives as a notification.">Sag Agent X z. B. „Erinnere mich morgen um 8 an Mathe“ – die Erinnerung kommt als Benachrichtigung.</p>
+          <p class="set-hint" id="set-push-text" data-en="Tell ApeX “Remind me tomorrow at 8 about maths” – the reminder arrives as a notification.">Sag ApeX z. B. „Erinnere mich morgen um 8 an Mathe“ – die Erinnerung kommt als Benachrichtigung.</p>
           <button type="button" class="btn" id="set-push-on" data-en="Allow notifications">Benachrichtigungen erlauben</button>
           <button type="button" class="btn ghost-btn" id="set-push-test" hidden data-en="Send test notification">Test-Benachrichtigung senden</button>
           <ul class="mem-list" id="set-reminders"></ul>
@@ -559,7 +563,7 @@
           <a class="btn ghost-btn set-export" id="set-export" href="/api/chat/export" download data-en="Download all my data">Alle meine Daten herunterladen</a>
           <p class="set-hint" data-en="A file with your account, chats, memory and reminders (JSON).">Eine Datei mit deinem Konto, allen Chats, dem Gedächtnis und deinen Erinnerungen (JSON).</p>
           <button type="button" class="btn ghost-btn" id="set-clear" data-en="Delete all chats">Alle Chats löschen</button>
-          <p class="set-hint" data-en="Battle votes stay in the leaderboard anonymously.">Abgestimmte Battles bleiben anonym in der Bestenliste.</p>
+          <p class="set-hint staff-only" data-en="Battle votes stay in the leaderboard anonymously.">Abgestimmte Battles bleiben anonym in der Bestenliste.</p>
         </section>
 
         <section class="set-group">

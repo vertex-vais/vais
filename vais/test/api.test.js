@@ -18,7 +18,7 @@ before(async () => {
   server.stdout.on('data', (d) => { log += d; });
   server.stderr.on('data', (d) => { log += d; });
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(`${BASE}/healthz`)).ok) return; } catch { /* startet noch */ }
+    try { if ((await fetch(`${BASE}/healthz`)).ok) { await signUp('admin@example.com'); return; } } catch { /* startet noch */ }
     await new Promise((r) => setTimeout(r, 150));
   }
   throw new Error(`Server startet nicht:\n${log}`);
@@ -52,6 +52,15 @@ async function signUp(email) {
   assert.equal(v.status, 200, JSON.stringify(v.data));
   return c;
 }
+// Test-Konto mit Admin-Modulen (Battle, Side by Side, Direkt …): wird Mod. Normale Nutzer haben nur ApeX.
+async function signUpTester(email) {
+  const c = await signUp(email);
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const id = (await a.json('/api/admin/users')).data.users.find((u) => u.email === email).id;
+  assert.equal((await a.json('/api/admin/role', { userId: id, role: 'mod' })).status, 200);
+  return c;
+}
 async function stream(c, chatId, text, turn = 0) {
   const res = await c.call('/api/chat/stream', { chatId, side: 0, turn, messages: [{ role: 'user', content: text }], display: { text } });
   const lines = (await res.text()).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -73,7 +82,7 @@ test('Fremde Webseiten dürfen nichts ändern (CSRF)', async () => {
 });
 
 test('Registrieren, chatten, Verlauf, Verbrauch', async () => {
-  const c = await signUp('user@example.com');
+  const c = await signUpTester('user@example.com');
   assert.equal((await c.json('/api/auth/me')).data.user.email, 'user@example.com');
   const models = (await c.json('/api/chat/models')).data;
   assert.equal(models.models[0].id, 'agent'); // Agent X ganz oben
@@ -113,7 +122,8 @@ test('Admin-Bereich nur für Admins', async () => {
   const u = await signUp('normal@example.com');
   assert.equal((await u.json('/api/admin/overview')).status, 404);
   assert.equal((await u.call('/admin')).headers.get('location'), '/');
-  const a = await signUp('admin@example.com');
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
   assert.equal((await a.json('/api/auth/me')).data.user.admin, true);
   const over = await a.json('/api/admin/overview');
   assert.equal(over.status, 200);
@@ -138,7 +148,7 @@ test('Tageslimit greift und zeigt 100 %', async () => {
   const a = client();
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
   assert.equal((await a.json('/api/admin/limits', { limits: { text: 2 } })).status, 200);
-  const c = await signUp('limit@example.com');
+  const c = await signUpTester('limit@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'L' });
   assert.equal((await stream(c, start.data.id, 'a', 0)).status, 200);
@@ -171,7 +181,7 @@ test('Konto löschen entfernt alles', async () => {
 });
 
 test('Daten herunterladen und Chats sortieren', async () => {
-  const c = await signUp('export@example.com');
+  const c = await signUpTester('export@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Export' });
   await stream(c, start.data.id, 'Hallo');
@@ -188,7 +198,7 @@ test('Daten herunterladen und Chats sortieren', async () => {
 });
 
 test('Sehr lange Chats werden zusammengefasst statt abzubrechen', async () => {
-  const c = await signUp('long@example.com');
+  const c = await signUpTester('long@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Lang' });
   const messages = [];
@@ -273,7 +283,7 @@ test('Übersetzer übersetzt und zählt eine Antwort', async () => {
 });
 
 test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung Hilfe', async () => {
-  const c = await signUp('safe@example.com');
+  const c = await signUpTester('safe@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'S' });
   const before = (await c.json('/api/chat/usage')).data.kinds.text.used;
@@ -287,7 +297,7 @@ test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung H
 });
 
 test('👎 mit Gründen landet in der Admin-Auswertung', async () => {
-  const c = await signUp('fb@example.com');
+  const c = await signUpTester('fb@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'FB' });
   await stream(c, start.data.id, 'Hallo');
@@ -357,7 +367,7 @@ test('Mitteilungen erreichen alle bzw. nur ausgewählte Personen', async () => {
 });
 
 test('Inkognito-Chats tauchen nirgends auf und verschwinden beim Verlassen', async () => {
-  const c = await signUp('inco@example.com');
+  const c = await signUpTester('inco@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Geheim', incognito: true });
   await stream(c, start.data.id, 'Geheime Frage');
@@ -409,7 +419,7 @@ test('Höchstens N gespeicherte Chats – Inkognito zählt nicht', async () => {
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
   await a.json('/api/admin/limits', { limits: { maxChats: 2 } });
   try {
-    const c = await signUp('maxchats@example.com');
+    const c = await signUpTester('maxchats@example.com');
     const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
     const ids = [];
     for (let i = 0; i < 2; i++) {
@@ -473,7 +483,7 @@ test('Meldungen: Gast meldet Webseite, Mod entfernt sie', async () => {
 });
 
 test('Auto-Modus wählt je nach Frage ein Modell und sagt warum', async () => {
-  const c = await signUp('auto@example.com');
+  const c = await signUpTester('auto@example.com');
   const models = (await c.json('/api/chat/models')).data.models;
   assert.equal(models[1].id, 'auto');
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'auto', models: ['auto'], title: 'A' });
@@ -490,7 +500,7 @@ test('Auto-Modus wählt je nach Frage ein Modell und sagt warum', async () => {
 });
 
 test('Antwort-Speicher: gleiche erste Frage kommt sofort und zählt nicht', async () => {
-  const c = await signUp('cache@example.com');
+  const c = await signUpTester('cache@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
   const one = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C1' });
   const a = await stream(c, one.data.id, 'Was ist ein Regenbogen?');
@@ -524,7 +534,7 @@ test('Fehler-Tagebuch und Server-Infos im Admin', async () => {
 });
 
 test('Wiederaufnahme: Verbindung weg – die Antwort wird trotzdem fertig gespeichert', async () => {
-  const c = await signUp('resume@example.com');
+  const c = await signUpTester('resume@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'W' });
   const ctl = new AbortController();
@@ -560,7 +570,7 @@ test('Sicherheit: Anfragen ohne Herkunft, Wegwerf-Adressen, Sicherheits-Kopfzeil
 });
 
 test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
-  const c = await signUp('extras@example.com');
+  const c = await signUpTester('extras@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'E' });
   await stream(c, start.data.id, 'Hallo');
@@ -569,7 +579,7 @@ test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
   assert.equal(a.status, 200);
   assert.deepEqual(a.data, b.data);
   // fremder Chat → nichts
-  const other = await signUp('extras2@example.com');
+  const other = await signUpTester('extras2@example.com');
   assert.equal((await other.json('/api/chat/extras', { chatId: start.data.id, turn: 0 })).status, 404);
 });
 
@@ -579,7 +589,9 @@ test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Frag
   assert.equal((await a.json('/api/admin/faq', { question: 'Wer hat ApeX gemacht?', answer: 'ApeX hat Leeam gebaut 🚀' })).status, 200);
   const u = await signUp('faq@example.com');
   const first = (await u.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
-  const start = await u.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'F' });
+  // normaler Nutzer: „direct“ wird vom Server zu ApeX
+  const start = await u.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first?.id], title: 'F' });
+  assert.equal(start.status, 200);
   const before = (await u.json('/api/chat/usage')).data.kinds.text.used;
   const r = await stream(u, start.data.id, 'wer hat bitte apex gemacht');
   assert.ok(r.lines.some((l) => l.faq));
@@ -593,7 +605,7 @@ test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Frag
   assert.equal((await u.json('/api/admin/faq', { question: 'x y', answer: 'z' })).status, 404);
   // häufigste Fragen: zweite Person fragt dasselbe
   const u2 = await signUp('faq2@example.com');
-  const s2 = await u2.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'F2' });
+  const s2 = await u2.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first?.id], title: 'F2' });
   await stream(u2, s2.data.id, 'Was ist ein Wal?');
   const top = (await a.json('/api/admin/top-questions?days=30')).data;
   const wal = top.questions.find((q) => /wal/i.test(q.text));
@@ -629,7 +641,7 @@ test('Sicherheit: neues Konto erreicht nichts aus dem Admin-Bereich', async () =
 });
 
 test('„Denken“ zählt als 2 Antworten und liefert Gedanken', async () => {
-  const c = await signUp('think@example.com');
+  const c = await signUpTester('think@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => m.id === 'demo:aurora');
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'D' });
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 0, think: true, messages: [{ role: 'user', content: 'Warum ist der Himmel blau?' }], display: { text: 'Warum ist der Himmel blau?' } });
@@ -644,7 +656,7 @@ test('„Denken“ zählt als 2 Antworten und liefert Gedanken', async () => {
 });
 
 test('Websuche: eigene Suche, nummerierte Quellen und [n] in der Antwort', async () => {
-  const c = await signUp('web@example.com');
+  const c = await signUpTester('web@example.com');
   const models = (await c.json('/api/chat/models')).data.models;
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'web', models: ['auto'], title: 'W' });
   assert.equal(start.status, 200);
@@ -674,11 +686,61 @@ test('Kontostand-API: nur eigene Daten, mit Verlauf', async () => {
 
 test('Agentenchats (Beta): nur für Admins und Mods', async () => {
   const user = await signUp('normal-life@example.com');
-  assert.equal((await user.json('/api/chat/start', { mode: 'life', title: 'x' })).status, 403);
+  // normale Nutzer bekommen statt Agentenchats immer ApeX
+  const plain = await user.json('/api/chat/start', { mode: 'life', title: 'x' });
+  assert.equal(plain.status, 200);
+  assert.equal((await user.json(`/api/chat/${plain.data.id}`)).data.mode, 'agent');
   const admin = client();
   await admin.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
   const start = await admin.json('/api/chat/start', { mode: 'life', title: 'Alltag' });
   assert.equal(start.status, 200);
   const out = await stream(admin, start.data.id, 'Ich gehe jeden Morgen joggen');
   assert.ok(out.lines.some((l) => l.done));
+});
+
+test('ApeX ist die einzige KI für normale Nutzer – Admin-Module nur für Admins und Mods', async () => {
+  const u = await signUp('apex-only@example.com');
+  const models = (await u.json('/api/chat/models')).data;
+  assert.equal(models.apexOnly, true);
+  assert.deepEqual(models.models.map((m) => [m.id, m.name]), [['agent', 'ApeX']]); // keine Modellnamen
+  for (const body of [{ mode: 'battle' }, { mode: 'sxs', models: ['a', 'b'] }, { mode: 'direct', models: ['x'] }, { mode: 'quatsch' }, {}]) {
+    const start = await u.json('/api/chat/start', { ...body, modality: 'image', title: 'T' });
+    assert.equal(start.status, 200, JSON.stringify(body));
+    assert.deepEqual(start.data.models, ['ApeX']);
+    const chat = (await u.json(`/api/chat/${start.data.id}`)).data;
+    assert.equal(chat.mode, 'agent');
+    assert.equal(chat.modality, 'auto');
+  }
+  assert.equal((await u.json('/api/chat/leaderboard')).status, 404);
+  const stats = (await u.json('/api/chat/stats')).data;
+  assert.deepEqual([stats.favorites, stats.mostUsed], [[], []]);
+
+  // Mods/Admins können weiter testen; verliert jemand die Rolle, werden alte Chats zu ApeX
+  const t = await signUpTester('apex-mod@example.com');
+  assert.ok((await t.json('/api/chat/models')).data.models.length > 1);
+  const first = (await t.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  const battle = await t.json('/api/chat/start', { mode: 'battle', title: 'B' });
+  assert.equal(battle.status, 200);
+  const direct = await t.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'D' });
+  assert.equal((await t.json(`/api/chat/${direct.data.id}`)).data.mode, 'direct');
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const id = (await a.json('/api/admin/users')).data.users.find((x) => x.email === 'apex-mod@example.com').id;
+  await a.json('/api/admin/role', { userId: id, role: null });
+  const old = (await t.json(`/api/chat/${direct.data.id}`)).data;
+  assert.equal(old.mode, 'agent');
+  assert.ok(!(old.labels ?? []).includes(first.name));
+  const out = await stream(t, direct.data.id, 'Hallo ApeX');
+  assert.equal(out.status, 200);
+  assert.ok(out.lines.some((l) => l.done));
+});
+
+test('Startseite und Tour: eine KI, keine Modell-Auswahl für normale Nutzer', async () => {
+  const tour = await (await fetch(`${BASE}/tour.js`)).text();
+  assert.match(tour, /ApeX/);
+  assert.doesNotMatch(tour, /Battle|Side by Side|Modell|model|#mode-btn|#modality-btn|Bestenliste|leaderboard/i);
+  const css = await (await fetch(`${BASE}/app.css`)).text();
+  assert.match(css, /body:not\(\.is-staff\) \.staff-only/);
+  const app = await (await fetch(`${BASE}/app.js`)).text();
+  assert.match(app, /el\.modeBtn\.hidden = !isStaffUser/);
 });

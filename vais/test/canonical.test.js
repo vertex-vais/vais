@@ -214,5 +214,5 @@ test('Service Worker: Render-„Not Found“ (no-server) zeigt die Warte-Seite s
   assert.equal(renderNoServer(mk(404)), false); // echte 404 der App bleibt
   assert.equal(renderNoServer(mk(200, 'no-server')), false);
   assert.match(src, /renderNoServer\(first\) \? wakingPage\(\) : first/);
-  assert.match(src, /const CACHE = 'vais-v8'/);
+  assert.match(src, /const CACHE = 'vais-v9'/);
 });

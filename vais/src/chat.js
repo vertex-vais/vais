@@ -121,10 +121,17 @@ setInterval(() => {
   for (const [k, list] of usage) if (list.every((ts) => now - ts > 5 * 60 * 1000)) usage.delete(k);
 }, 10 * 60 * 1000).unref();
 
-// Agent X steht als eigenes „Modell“ ganz oben in der Liste
-const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
+// ApeX (intern „agent“): die eine KI für alle. Andere Module/Modelle gibt es nur für Admins und Mods.
+const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'ApeX', maker: 'VERTEX', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
+// Normale Nutzer chatten immer mit ApeX: alte Chats in anderen Modi werden beim Öffnen/Weiterschreiben umgestellt
+export async function asApex(row, user) {
+  if (!row || isStaff(user) || row.mode === 'agent') return row;
+  await run('UPDATE chats SET mode = ?, modality = ?, model_a = ?, model_b = NULL WHERE id = ?', 'agent', 'auto', 'agent', row.id);
+  return Object.assign(row, { mode: 'agent', modality: 'auto', model_a: 'agent', model_b: null, winner: null });
+}
 const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
+  if (!isStaff(req.user)) return res.json({ models: [AGENT_MODEL], demo: demoMode, apexOnly: true });
   res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
 
@@ -189,8 +196,11 @@ setInterval(() => {
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
-  const { mode, models = [], title } = req.body ?? {};
-  const modality = MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
+  const staff = isStaff(req.user);
+  const { models = [], title } = req.body ?? {};
+  // Normale Nutzer: immer ApeX – egal, welcher Modus/welches Modell geschickt wird
+  const mode = staff ? req.body?.mode : 'agent';
+  const modality = staff && MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
   let picked;
   if (mode === 'agent') {
     picked = ['agent'];
@@ -321,7 +331,7 @@ setInterval(async () => {
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
   const { chatId, side = 0, messages, turn, display } = req.body ?? {};
-  const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  const row = await asApex(await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id), req.user);
   if (!row) throw new HttpError(404, t('Chat nicht gefunden. Starte einen neuen Chat.', 'Chat not found. Start a new chat.'));
   let model = side === 1 ? row.model_b : row.model_a;
   if (!model) throw new HttpError(400, t('Ungültige Seite.', 'Invalid side.'));
@@ -330,7 +340,7 @@ chat.post('/stream', wrap(async (req, res) => {
   let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
   if (clean.at(-1).role !== 'user') throw new HttpError(400, t('Die letzte Nachricht muss von dir sein.', 'The last message must be yours.'));
   const hasImages = imageCount(clean) > 0;
-  // Websuche pro Nachricht (Schalter im Eingabefeld) – ohne neuen Chat; nicht bei Bildern und Agent X
+  // Websuche pro Nachricht (Schalter im Eingabefeld) – ohne neuen Chat; nicht bei Bildern und ApeX
   const webAsk = !!req.body?.web && row.modality !== 'image' && model !== 'agent';
   let auto = null; // Auto-Modus: welches Modell und warum
   if (model === 'auto') {
@@ -360,7 +370,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   const L = await limitSettings();
   limit(req.user.id, L.burst);
-  // Tageslimit: zählt je nach Art der Antwort (Antwort, Websuche, Bild, Agent X)
+  // Tageslimit: zählt je nach Art der Antwort (Antwort, Websuche, Bild, ApeX)
   const info = model === 'agent' ? null : await findModel(model);
   const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, zählt nicht
   const kind = quick ? null : model === 'agent' ? 'agent'
@@ -374,7 +384,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
   if (!blocked && !faq && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
-  // „Denken“: gründlicher nachdenken lassen – zählt als 2 Antworten (nicht bei Agent X und Bildern)
+  // „Denken“: gründlicher nachdenken lassen – zählt als 2 Antworten (nicht bei ApeX und Bildern)
   const think = !!req.body?.think && (kind === 'text' || kind === 'web');
   const cost = think ? 2 : 1;
   let charged;
@@ -404,7 +414,7 @@ chat.post('/stream', wrap(async (req, res) => {
   };
   let thinkStart = 0;
   let thinkMs = 0;
-  let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
+  let reaction = null; // Emoji-Reaktion von ApeX auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
   let cached = false; // Antwort kam aus dem Antwort-Speicher
   let faqHit = false; // Antwort kam aus den eigenen Antworten des Admins
@@ -432,7 +442,7 @@ chat.post('/stream', wrap(async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
-  // Schreiben nur, solange die Verbindung offen ist (Agent X arbeitet notfalls ohne weiter)
+  // Schreiben nur, solange die Verbindung offen ist (ApeX arbeitet notfalls ohne weiter)
   function out(line) { if (!res.destroyed && !res.writableEnded) res.write(line); }
   if (summarized) out(`${JSON.stringify({ summarized })}\n`);
   if (auto) out(`${JSON.stringify({ auto })}\n`);
@@ -477,10 +487,10 @@ chat.post('/stream', wrap(async (req, res) => {
 
   const controller = new AbortController();
   const runKey = `${row.id}:${turnNo}:${side === 1 ? 1 : 0}`;
-  const inbox = []; // Nachträge des Nutzers, während Agent X arbeitet
+  const inbox = []; // Nachträge des Nutzers, während ApeX arbeitet
   running.set(runKey, { controller, userId: req.user.id, inbox: model === 'agent' ? inbox : null });
   // Verbindung weg (App zu, Funkloch): die Antwort wird trotzdem fertig geschrieben und gespeichert –
-  // die App holt sie dann nach (Agent X meldet sich zusätzlich per Push)
+  // die App holt sie dann nach (ApeX meldet sich zusätzlich per Push)
   let detached = false;
   res.on('close', () => {
     if (res.writableFinished) return;
@@ -631,9 +641,9 @@ chat.post('/stream', wrap(async (req, res) => {
     running.delete(runKey);
   }
   if (detached && !controller.signal.aborted) {
-    const chatTitle = (await get('SELECT title FROM chats WHERE id = ?', row.id))?.title || 'Agent X';
+    const chatTitle = (await get('SELECT title FROM chats WHERE id = ?', row.id))?.title || 'ApeX';
     notifyUser(req.user.id, {
-      title: text || reaction ? t('Agent X ist fertig ✓', 'Agent X is done ✓') : t('Agent X hatte ein Problem', 'Agent X ran into a problem'),
+      title: text || reaction ? t('ApeX ist fertig ✓', 'ApeX is done ✓') : t('ApeX hatte ein Problem', 'ApeX ran into a problem'),
       body: `${chatTitle}: ${text.replace(/```[\s\S]*?(```|$)/g, '').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || reaction || ''}`,
       tag: `agent-${row.id}`,
       url: `/#c/${row.id}`,
@@ -642,7 +652,7 @@ chat.post('/stream', wrap(async (req, res) => {
   if (!res.writableEnded) res.end();
 }));
 
-// Nachricht in die laufende Arbeit von Agent X einbringen (statt zu warten)
+// Nachricht in die laufende Arbeit von ApeX einbringen (statt zu warten)
 chat.post('/inject', wrap(async (req, res) => {
   const { chatId, turn } = req.body ?? {};
   const text = String(req.body?.text ?? '').trim().slice(0, 4000);
@@ -742,6 +752,7 @@ const boards = new Map();
 export const clearBoards = () => boards.clear();
 registerCache('boards', clearBoards);
 chat.get('/leaderboard', wrap(async (req, res) => {
+  if (!isStaff(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // Modell-Bestenliste nur intern
   const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
   const cached = boards.get(cat);
   if (cached && Date.now() - cached.at < 60_000) return res.json(cached.data);
@@ -1071,8 +1082,9 @@ chat.get('/stats', wrap(async (req, res) => {
   res.json({
     chats, questions, votes, likes,
     modes: Object.fromEntries(byMode.map((r) => [r.mode, Number(r.n)])),
-    favorites: await top(wins),
-    mostUsed: await top(used),
+    // Modellnamen bleiben intern: normale Nutzer sehen nur ApeX
+    favorites: isStaff(req.user) ? await top(wins) : [],
+    mostUsed: isStaff(req.user) ? await top(used) : [],
     since: req.user.created_at,
     usage: await usageWithCosts(req.user),
   });
@@ -1150,7 +1162,7 @@ async function loadChatData(row, { forShare = false } = {}) {
 
 // Einen gespeicherten Chat laden (Battle-Modelle bleiben geheim, bis abgestimmt wurde)
 chat.get('/:id', wrap(async (req, res) => {
-  const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+  const row = await asApex(await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id), req.user);
   if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
   res.json(await loadChatData(row));
 }));

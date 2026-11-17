@@ -139,7 +139,7 @@ test('Agent X (echte Logik, Demo): Antwort, „schreibt …“, Verlauf höchste
   await bot.handleUpdate(msg('Was ist 21 mal 2?', from));
   assert.ok(api.calls.some((c) => c.method === 'sendChatAction' && c.body.action === 'typing'));
   const answer = api.sent().at(-1);
-  assert.match(answer.text, /Agent X/);
+  assert.match(answer.text, /ApeX/);
   assert.match(answer.text, /Quellen/); // Quellen aus dem Agenten als Links
   for (let i = 0; i < 12; i++) await bot.handleUpdate(msg(`Frage ${i}`, from));
   const { get } = await import('../src/db.js');
