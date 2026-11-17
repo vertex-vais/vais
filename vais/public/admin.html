@@ -29,6 +29,15 @@
   <main class="adm-main">
     <p class="adm-demo" id="demo" hidden data-en="Demo mode: no AI keys set.">Demo-Modus: Keine KI-Schlüssel eingetragen.</p>
 
+    <section class="adm-card adm-testmode" id="testmode-card">
+      <h2 data-en="Test mode">Testmodus</h2>
+      <label class="adm-switch">
+        <span><b data-en="Test mode for my account">Testmodus für mein Konto</b><small id="testmode-hint" data-en="Off: you use ApeX exactly like a normal user – only ApeX, same daily limits. On: test modules (Battle, Direct …) in the chat and no limits for you. Only affects your own account.">Aus: Du nutzt ApeX genau wie ein normaler Nutzer – nur ApeX, gleiche Tageslimits. An: Test-Module (Battle, Direkt …) im Chat und für dich keine Limits. Gilt nur für dein eigenes Konto.</small></span>
+        <input type="checkbox" id="testmode-on" role="switch">
+      </label>
+      <p class="adm-sub" id="testmode-state"></p>
+    </section>
+
     <section class="adm-tiles" id="tiles" aria-label="Kennzahlen" data-en-aria-label="Key figures"></section>
 
     <section class="adm-card" id="meldungen">

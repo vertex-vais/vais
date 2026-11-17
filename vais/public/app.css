@@ -2169,7 +2169,7 @@ html { background: var(--bg); }
 .konto .konto-table .k-amt, .konto .konto-table .k-bal { text-align: right; }
 .konto .konto-table .k-note { min-width: 6em; }
 
-/* ── ApeX = eine KI: Admin-Module und Modell-Statistiken nur für Admins und Mods ── */
+/* ── ApeX = eine KI: Admin-Module und Modell-Statistiken nur für Admins und Mods im Testmodus ── */
 body:not(.is-staff) .staff-only { display: none !important; }
 .home-mark { width: 64px; height: 64px; border-radius: 16px; display: block; margin: 0 auto 4px; }
 .home-sub { margin: 0; max-width: 34ch; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.45; }

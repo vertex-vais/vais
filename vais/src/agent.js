@@ -473,8 +473,10 @@ export function searchBudget(question = '') {
 // Bild erstellen: bestes freies Bildmodell, bei Fehler das nächste (höchstens 3 Versuche)
 async function imageWithFallback(prompt, signal, ctx) {
   if (!ctx.onImage) return 'Bilder sind hier nicht verfügbar.';
-  const all = (await listModels()).filter((m) => m.caps.includes('image') && !m.busy && !m.paid);
+  const all = (await listModels()).filter((m) => m.caps.includes('image') && !m.paid);
+  // Freie zuerst; ist gerade alles „voll“, trotzdem versuchen (makeImage wartet kurz und versucht es erneut)
   const order = rankModels('image', all, { cap: 'image' }).slice(0, 3);
+  if (!order.length) order.push(...rankModels('image', all, { cap: 'image', includeBusy: true }).slice(0, 2));
   if (!order.length) return 'Gerade ist kein Bildmodell frei – beschreibe dem Nutzer stattdessen, wie das Bild aussehen würde.';
   let lastErr = null;
   for (const m of order) {

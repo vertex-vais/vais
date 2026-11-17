@@ -3,7 +3,7 @@ import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'nod
 import { promisify } from 'node:util';
 import { get, run, all, purgeChats } from './db.js';
 import { t, lang } from './i18n.js';
-import { isAdmin, isMod } from './config.js';
+import { isAdmin, isMod, isStaff, inTestMode, isUnlimited } from './config.js';
 import { publicOrigin } from './canonical.js';
 import { sendCode } from './mailer.js';
 import { signupGuard, codeGuard } from './guard.js';
@@ -130,7 +130,7 @@ export async function currentUser(req) {
   if (!token) return null;
   const hash = sha256(token);
   const row = await get(`
-    SELECT u.id, u.email, u.created_at, u.role, s.last_seen FROM sessions s
+    SELECT u.id, u.email, u.created_at, u.role, u.test_mode, s.last_seen FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ? AND (u.blocked IS NULL OR u.blocked = 0)
   `, hash, Date.now());
@@ -437,7 +437,7 @@ auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
   const welcomed = (await get('SELECT welcomed FROM users WHERE id = ?', user.id))?.welcomed;
-  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined, welcome: !welcomed || undefined } });
+  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined, testMode: isStaff(user) ? inTestMode(user) : undefined, unlimited: isUnlimited(user) || undefined, welcome: !welcomed || undefined } });
 }));
 // Willkommens-Paket gesehen → nie wieder zeigen (auf keinem Gerät)
 auth.post('/welcomed', wrap(async (req, res) => {

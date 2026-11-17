@@ -8,6 +8,7 @@ import { join } from 'node:path';
 process.env.DATABASE_URL = `file:${join(mkdtempSync(join(tmpdir(), 'vais-img-')), 'i.db')}`;
 for (const k of ['OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'POLLINATIONS_API_KEY', 'TOGETHER_API_KEY', 'DISABLE_FREE_IMAGES']) delete process.env[k];
 process.env.GROQ_API_KEY = 'test-key-groq-0000000000';
+process.env.IMAGE_RETRY_SCALE = '0'; // im Test nicht wirklich warten
 
 const GERMAN = 'Erstelle mir ein Bild von einem glänzenden roten Sportwagen, der bei Dämmerlicht auf einer nassen Stadtstraße fährt, mit reflektierenden Lichtern und nassen Fahrbahnspuren, aus leicht schrägem Winkel aufgenommen, fotorealistischer Stil, hohe Kontraste und lebendige Farben.';
 const ENGLISH = 'A glossy red sports car driving on a wet city street at dusk, reflecting lights and wet tire tracks, slightly angled low shot, photorealistic, high contrast, vivid colors';
@@ -15,7 +16,7 @@ const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const PNG_B64 = Buffer.from('png-bytes').toString('base64');
 
 const seen = [];
-const state = { llm: 'ok', together: 'ok' };
+const state = { llm: 'ok', together: 'ok', classicFull: 0 };
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   seen.push({ url: u, body: opts.body ? String(opts.body) : null });
@@ -26,6 +27,10 @@ globalThis.fetch = async (url, opts = {}) => {
     return json({ choices: [{ message: { role: 'assistant', content: `Prompt: "${ENGLISH}"` }, finish_reason: 'stop' }] });
   }
   if (u === 'https://image.pollinations.ai/models') return json(['sana', 'flux']);
+  if (u.startsWith('https://image.pollinations.ai/prompt/') && state.classicFull > 0) {
+    state.classicFull--;
+    return json({ status: 503, success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 'The Classic API is at its limit right now. Retry after 10s, or get full access …' } }, 503);
+  }
   if (u.startsWith('https://image.pollinations.ai/prompt/')) return new Response(JPEG, { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
   if (u === 'https://api.together.xyz/v1/images/generations') {
     if (state.together === 'limit') return json({ error: 'rate limit' }, 429);
@@ -105,4 +110,17 @@ test('Umschreiben klappt nicht → Original wird verwendet (kein Fehler)', async
   state.llm = 'fail';
   assert.equal(await imagePrompt('Ein blaues Fahrrad am Meer'), 'Ein blaues Fahrrad am Meer');
   state.llm = 'ok';
+});
+
+test('Kostenlose Pollinations-Schnittstelle kurz voll (503 „Retry after 10s“): wartet, versucht erneut, blendet das Modell nicht aus', async () => {
+  state.classicFull = 2;
+  const img = await generateImage({ model: 'pollinations:sana', prompt: 'Sonnenuntergang am Meer', rewrite: false });
+  assert.match(img, /^data:image\/jpeg;base64,/);
+  assert.equal(state.classicFull, 0);
+  // dauerhaft voll → verständlicher Fehler, aber das Modell bleibt auswählbar (nicht „busy“)
+  state.classicFull = 99;
+  await assert.rejects(generateImage({ model: 'pollinations:sana', prompt: 'Sonnenuntergang', rewrite: false }));
+  state.classicFull = 0;
+  const sana = (await listModels()).find((m) => m.id === 'pollinations:sana');
+  assert.ok(sana && !sana.busy);
 });

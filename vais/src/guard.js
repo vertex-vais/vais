@@ -3,6 +3,7 @@
 // Alles im Speicher, pro Tag (deutsche Zeit); nach einem Neustart fängt es neu an.
 import { t } from './i18n.js';
 import { HttpError } from './auth.js';
+import { isUnlimited } from './config.js';
 const DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
 const dayKey = () => DAY.format(new Date());
 
@@ -22,6 +23,7 @@ const ipOf = (req) => String(req.ip ?? req.socket?.remoteAddress ?? '?');
 // Helfer-Funktionen (✨ verbessern, Vorschläge, Spracheingabe …): Tagesgrenze pro Konto und pro Netz
 const HELPER_DAILY = { extras: 400, improve: 120, transcribe: 400, tts: 400, summary: 200 };
 export function helperQuota(req, name) {
+  if (isUnlimited(req.user)) return; // Admin im Testmodus
   const max = HELPER_DAILY[name] ?? 200;
   if (!bump(`h:${name}`, `u:${req.user?.id}`, max) || !bump(`h:${name}`, `ip:${ipOf(req)}`, max * 6)) {
     throw new HttpError(429, t('Diese Funktion ist für heute ausgeschöpft. Morgen geht es weiter.', 'This feature is used up for today. It resets tomorrow.'));

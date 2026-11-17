@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
-import { isStaff } from './config.js';
+import { isStaff, inTestMode, isUnlimited } from './config.js';
 import { registerCache } from './stability.js';
 import { helperQuota, ipAnswerQuota, undoIpAnswer } from './guard.js';
 import { faqMatch } from './faq.js';
@@ -109,7 +109,9 @@ const premiumError = (max) => Object.assign(
 
 // Schutz vor Dauerfeuer: höchstens „burst“ Antworten in 5 Minuten (das Tageslimit steht in limits.js)
 const usage = new Map();
-function limit(userId, burst) {
+function limit(user, burst) {
+  if (isUnlimited(user)) return; // Admin im Testmodus: kein Rate-Limit
+  const userId = user.id;
   const now = Date.now();
   const list = (usage.get(userId) || []).filter((ts) => now - ts < 5 * 60 * 1000);
   if (list.length >= burst) throw new HttpError(429, t('Du sendest gerade sehr viele Nachrichten. Warte kurz.', 'You are sending a lot of messages. Please wait a moment.'));
@@ -125,13 +127,13 @@ setInterval(() => {
 const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'ApeX', maker: 'VERTEX', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
 // Normale Nutzer chatten immer mit ApeX: alte Chats in anderen Modi werden beim Öffnen/Weiterschreiben umgestellt
 export async function asApex(row, user) {
-  if (!row || isStaff(user) || row.mode === 'agent') return row;
+  if (!row || inTestMode(user) || row.mode === 'agent') return row; // Admins/Mods ohne Testmodus: wie normale Nutzer
   await run('UPDATE chats SET mode = ?, modality = ?, model_a = ?, model_b = NULL WHERE id = ?', 'agent', 'auto', 'agent', row.id);
   return Object.assign(row, { mode: 'agent', modality: 'auto', model_a: 'agent', model_b: null, winner: null });
 }
 const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'ApeX', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
-  if (!isStaff(req.user)) return res.json({ models: [AGENT_MODEL], demo: demoMode, apexOnly: true });
+  if (!inTestMode(req.user)) return res.json({ models: [AGENT_MODEL], demo: demoMode, apexOnly: true });
   res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
 
@@ -196,7 +198,7 @@ setInterval(() => {
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
-  const staff = isStaff(req.user);
+  const staff = inTestMode(req.user); // Module nur im Testmodus
   const { models = [], title } = req.body ?? {};
   // Normale Nutzer: immer ApeX – egal, welcher Modus/welches Modell geschickt wird
   const mode = staff ? req.body?.mode : 'agent';
@@ -206,7 +208,7 @@ chat.post('/start', wrap(async (req, res) => {
     picked = ['agent'];
   } else if (mode === 'life') {
     // Agentenchats (Beta): vorerst nur für Mods und Admins
-    if (!isStaff(req.user)) throw new HttpError(403, t('Agentenchats sind noch in der Beta und nur für Mods und Admins.', 'Agent chats are still in beta and only for mods and admins.'));
+    if (!inTestMode(req.user)) throw new HttpError(403, t('Agentenchats sind noch in der Beta und nur für Mods und Admins.', 'Agent chats are still in beta and only for mods and admins.'));
     picked = ['agent'];
   } else if (mode === 'battle') {
     const cap = modality === 'image' ? 'image' : req.body?.images ? 'vision' : MODALITY_CAP[modality];
@@ -231,7 +233,7 @@ chat.post('/start', wrap(async (req, res) => {
   const incognito = req.body?.incognito ? 1 : null; // wird nicht gespeichert (verschwindet beim Verlassen)
   // Höchstens „maxChats“ gespeicherte Chats pro Person (Inkognito zählt nicht)
   const { maxChats } = await limitSettings();
-  if (maxChats && !incognito) {
+  if (maxChats && !incognito && !isUnlimited(req.user)) {
     await run('DELETE FROM chats WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id) AND created_at < ?', req.user.id, Date.now() - 60_000);
     const open = Number((await get('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND incognito IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)', req.user.id))?.n ?? 0);
     if (open >= maxChats) {
@@ -369,7 +371,7 @@ chat.post('/stream', wrap(async (req, res) => {
   clean = fitted.messages;
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   const L = await limitSettings();
-  limit(req.user.id, L.burst);
+  limit(req.user, L.burst);
   // Tageslimit: zählt je nach Art der Antwort (Antwort, Websuche, Bild, ApeX)
   const info = model === 'agent' ? null : await findModel(model);
   const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, zählt nicht
@@ -383,7 +385,7 @@ chat.post('/stream', wrap(async (req, res) => {
   // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, zählt nicht
   const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
-  if (!blocked && !faq && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
+  if (!blocked && !faq && kind && !inTestMode(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
   // „Denken“: gründlicher nachdenken lassen – zählt als 2 Antworten (nicht bei ApeX und Bildern)
   const think = !!req.body?.think && (kind === 'text' || kind === 'web');
   const cost = think ? 2 : 1;
@@ -555,7 +557,7 @@ chat.post('/stream', wrap(async (req, res) => {
       for (let attempt = 0; ; attempt++) {
         try {
           if ((await findModel(model))?.paid) {
-            if (!paidAllowed(req.user.id, L.paidDaily)) throw premiumError(L.paidDaily);
+            if (!(isUnlimited(req.user) || paidAllowed(req.user.id, L.paidDaily))) throw premiumError(L.paidDaily);
             countPaid(req.user.id);
           }
           if (row.modality === 'image') {
@@ -599,7 +601,7 @@ chat.post('/stream', wrap(async (req, res) => {
           if (!battle && !NOTFALL_STATUS.has(err.status) && !isBusy(model)) throw err;
           const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
           const other = side === 1 ? fresh.model_a : fresh.model_b;
-          const premiumIds = paidAllowed(req.user.id, L.paidDaily) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
+          const premiumIds = (isUnlimited(req.user) || paidAllowed(req.user.id, L.paidDaily)) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
           const needCap = row.modality === 'image' ? 'image' : hasImages ? 'vision' : (MODALITY_CAP[row.modality] ?? 'text');
           const next = battle ? await pickAvailable(needCap, [...tried, other, ...premiumIds]) : await pickEmergency(needCap, [...tried, ...premiumIds]);
           if (!next) throw err;
@@ -752,7 +754,7 @@ const boards = new Map();
 export const clearBoards = () => boards.clear();
 registerCache('boards', clearBoards);
 chat.get('/leaderboard', wrap(async (req, res) => {
-  if (!isStaff(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // Modell-Bestenliste nur intern
+  if (!inTestMode(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.')); // Modell-Bestenliste nur intern
   const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
   const cached = boards.get(cat);
   if (cached && Date.now() - cached.at < 60_000) return res.json(cached.data);
@@ -899,7 +901,7 @@ chat.post('/tts', wrap(async (req, res) => {
   const voice = TTS_VOICES.includes(req.body?.voice) ? req.body.voice : 'nova';
   if (!text) throw new HttpError(400, t('Kein Text.', 'No text.'));
   const L = await limitSettings();
-  limit(req.user.id, L.burst * 4);
+  limit(req.user, L.burst * 4);
   helperQuota(req, 'tts');
   const key = `${voice}:${text}`;
   let buf = ttsCache.get(key);
@@ -938,7 +940,7 @@ chat.post('/transcribe', express.raw({ type: ['audio/*', 'video/webm', 'video/mp
   const buf = req.body;
   if (!Buffer.isBuffer(buf) || buf.length < 500) return res.json({ text: '' }); // zu kurz/leer
   const L = await limitSettings();
-  limit(req.user.id, L.burst * 2);
+  limit(req.user, L.burst * 2);
   helperQuota(req, 'transcribe');
   const lang = String(req.query.lang ?? '').slice(0, 5);
   try {
@@ -959,7 +961,7 @@ chat.post('/improve', wrap(async (req, res) => {
   const modality = String(req.body?.modality ?? '');
   if (text.length < 2) throw new HttpError(400, t('Schreib zuerst etwas.', 'Write something first.'));
   const L = await limitSettings();
-  limit(req.user.id, L.burst);
+  limit(req.user, L.burst);
   helperQuota(req, 'improve');
   if (demoMode) return res.json({ text: `${text}\n\nBitte antworte klar gegliedert, mit einem kurzen Beispiel und einer Zusammenfassung am Ende.` });
   const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
@@ -992,10 +994,10 @@ chat.post('/translate', wrap(async (req, res) => {
   const to = String(req.body?.to ?? '').slice(0, 40);
   if (!text || !to) throw new HttpError(400, t('Nichts zu übersetzen.', 'Nothing to translate.'));
   const L = await limitSettings();
-  limit(req.user.id, L.burst);
+  limit(req.user, L.burst);
   const unsafe = await checkText(text, 'prompt');
   if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
-  if (!isStaff(req.user)) ipAnswerQuota(req.ip, 'text', L.text);
+  if (!inTestMode(req.user)) ipAnswerQuota(req.ip, 'text', L.text);
   const charged = await charge(req.user, 'text');
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
@@ -1083,8 +1085,8 @@ chat.get('/stats', wrap(async (req, res) => {
     chats, questions, votes, likes,
     modes: Object.fromEntries(byMode.map((r) => [r.mode, Number(r.n)])),
     // Modellnamen bleiben intern: normale Nutzer sehen nur ApeX
-    favorites: isStaff(req.user) ? await top(wins) : [],
-    mostUsed: isStaff(req.user) ? await top(used) : [],
+    favorites: inTestMode(req.user) ? await top(wins) : [],
+    mostUsed: inTestMode(req.user) ? await top(used) : [],
     since: req.user.created_at,
     usage: await usageWithCosts(req.user),
   });

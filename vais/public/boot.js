@@ -49,14 +49,15 @@
   else if (theme !== 'system') root.setAttribute('data-theme', 'dark');
 
   var LANGS = ['de', 'en', 'tr', 'es', 'fr', 'uk'];
-  // Sprache: selbst gewählte > Browsersprache > Deutsch
-  var lang = read('vais.lang');
+  // Sprache: ApeX ist zuerst deutsch. Nur eine selbst gewählte Sprache (Einstellungen) gilt – die Browsersprache nicht.
+  // Früher wurde die Browsersprache automatisch gespeichert (ohne „langPicked“) → das zählt nicht als Wahl.
+  var picked = !!read('vais.langPicked');
+  var lang = picked ? read('vais.lang') : 'de';
   if (LANGS.indexOf(lang) === -1) {
-    var before = read('vais.langPicked') ? (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1] : null;
-    var nav = String(navigator.language || '').slice(0, 2).toLowerCase();
-    lang = LANGS.indexOf(before) !== -1 ? before : LANGS.indexOf(nav) !== -1 ? nav : 'de';
-    try { localStorage.setItem('vais.lang', JSON.stringify(lang)); } catch (e) { /* egal */ }
+    var before = picked ? (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1] : null;
+    lang = LANGS.indexOf(before) !== -1 ? before : 'de';
   }
+  try { localStorage.setItem('vais.lang', JSON.stringify(lang)); } catch (e) { /* egal */ }
   root.setAttribute('lang', lang);
   root.setAttribute('data-lang', lang);
   try { document.cookie = 'vais_lang=' + lang + '; path=/; max-age=31536000; samesite=lax'; } catch (e) { /* egal */ }
