@@ -245,3 +245,6 @@ textarea.adm-input { resize: vertical; min-height: 80px; line-height: 1.45; }
 .adm-top .adm-bar { height: 6px; margin-left: 30px; }
 .adm-top small { margin-left: 30px; }
 .adm-ok { color: var(--success, #2e9e5b); }
+
+/* Testmodus-Schalter oben: an = dezent hervorgehoben */
+.adm-testmode.on { border-color: var(--accent, #fff); }

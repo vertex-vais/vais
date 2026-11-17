@@ -925,6 +925,8 @@ const STRONG_IMAGE = [
 ];
 export const strongImageProviders = () => STRONG_IMAGE.filter((p) => p.available()).map((p) => p.name);
 
+const IMAGE_RETRIES = 4;
+const IMAGE_RETRY_SCALE = Number(process.env.IMAGE_RETRY_SCALE ?? 1); // Tests: 0 = nicht warten
 async function makeImage({ model, prompt, signal, reference }) {
   const [provider, ...rest] = model.split(':');
   const upstream = rest.join(':');
@@ -951,14 +953,27 @@ async function makeImage({ model, prompt, signal, reference }) {
   const url = imageKey?.key
     ? `https://gen.pollinations.ai/image/${encodeURIComponent(text)}?${query}`
     : `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?${query}`;
-  const res = await fetch(url, {
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
-    headers: imageKey?.key ? { Authorization: `Bearer ${imageKey.key}` } : {},
-  });
-  if (imageKey?.key && (res.status === 401 || res.status === 429)) noteFailureBySecret('pollinations', imageKey.key, res.status);
-  const type = res.headers.get('content-type') || '';
-  if (!res.ok || !type.startsWith('image/')) {
+  // Die kostenlose „Classic“-Schnittstelle ist oft kurz voll (503/429 „Retry after 10s“) → kurz warten und
+  // nochmal versuchen, statt das (einzige) Bildmodell gleich als kaputt auszublenden
+  let res;
+  let type = '';
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
+      headers: imageKey?.key ? { Authorization: `Bearer ${imageKey.key}` } : {},
+    });
+    if (imageKey?.key && (res.status === 401 || res.status === 429)) noteFailureBySecret('pollinations', imageKey.key, res.status);
+    type = res.headers.get('content-type') || '';
+    if (res.ok && type.startsWith('image/')) break;
     const body = await res.text().catch(() => '');
+    if ((res.status === 503 || res.status === 429) && attempt < IMAGE_RETRIES) {
+      const wait = Math.min(15_000, Math.max(2_000, (Number(body.match(/retry after (\d+)\s*s/i)?.[1]) || 8) * 1000)) + Math.floor(Math.random() * 1500);
+      await new Promise((r) => setTimeout(r, IMAGE_RETRY_SCALE * wait));
+      if (signal?.aborted) throw signal.reason ?? new Error('aborted');
+      continue;
+    }
+    // Voll (503/429) ist kein Defekt: nicht ausblenden, sonst ist beim nächsten Bild „kein Bildmodell frei“
+    if (res.status === 503 || res.status === 429) throw Object.assign(new Error(friendlyError(429, body.slice(0, 200), IMAGES)), { status: 429, raw: body.slice(0, 200) });
     throw fail(model, res.ok ? 502 : res.status, body.slice(0, 200), IMAGES);
   }
   const buf = Buffer.from(await res.arrayBuffer());

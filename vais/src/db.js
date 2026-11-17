@@ -75,6 +75,7 @@ try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); 
 try { await client.execute('ALTER TABLE users ADD COLUMN instructions TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN memory_off INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN plan_off INTEGER'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN test_mode INTEGER'); } catch { /* gibt es schon */ } // Testmodus für Admins/Mods (NULL/0 = aus)
 // Willkommens-Paket nur einmal pro Konto. Wer schon da war, als es das gab, bekommt es nicht nachträglich.
 try {
   await client.execute('ALTER TABLE users ADD COLUMN welcomed INTEGER');

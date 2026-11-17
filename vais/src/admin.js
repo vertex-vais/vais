@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { get, run, all, getSetting, setSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
-import { isAdmin, isStaff, ADMIN_EMAILS } from './config.js';
+import { isAdmin, isStaff, inTestMode, isUnlimited, ADMIN_EMAILS } from './config.js';
 import { notifyUser } from './push.js';
 import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } from './models.js';
 import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage, KINDS, scaled } from './limits.js';
@@ -27,6 +27,19 @@ admin.use(wrap(async (req, res, next) => {
   if (!isStaff(req.user)) throw new HttpError(404, t('Nicht gefunden.', 'Not found.'));
   req.isAdmin = isAdmin(req.user);
   next();
+}));
+
+// Testmodus (pro Konto): aus = ApeX wie ein normaler Nutzer (nur ApeX, normale Limits), an = Test-Module
+// und – nur für Admins – keine Limits. Jeder Admin/Mod schaltet ihn nur für sich selbst.
+admin.get('/test-mode', wrap(async (req, res) => {
+  res.json({ on: inTestMode(req.user), unlimited: isUnlimited(req.user), role: req.isAdmin ? 'admin' : 'mod' });
+}));
+admin.post('/test-mode', wrap(async (req, res) => {
+  const on = req.body?.on === true;
+  await run('UPDATE users SET test_mode = ? WHERE id = ?', on ? 1 : null, req.user.id);
+  req.user.test_mode = on ? 1 : null;
+  await logEvent('admin', null, `Testmodus ${on ? 'an' : 'aus'}: ${req.user.email}`);
+  res.json({ on: inTestMode(req.user), unlimited: isUnlimited(req.user), role: req.isAdmin ? 'admin' : 'mod' });
 }));
 
 // Nur für Admins (Moderatoren dürfen das nicht)
@@ -86,6 +99,7 @@ admin.get('/overview', wrap(async (req, res) => {
     busy,
     boardResetAt: resetAt,
     role: req.isAdmin ? 'admin' : 'mod',
+    testMode: inTestMode(req.user),
     safety: await safetyOn(),
     alarms: await alarmsOn(),
     reportsOpen: await openReportCount(),

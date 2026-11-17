@@ -287,6 +287,7 @@ async function load() {
     role = d.role;
     document.querySelectorAll('[data-admin-only]').forEach((el) => { el.hidden = role !== 'admin'; });
     $('.adm-badge').textContent = role === 'admin' ? 'Admin' : 'Mod';
+    paintTestMode({ on: d.testMode === true, unlimited: d.testMode === true && role === 'admin' });
     if (role === 'admin' && !annLoaded) { annLoaded = true; loadAnnHistory(); }
     tiles(d.counts);
     models(d.models, d.modes);
@@ -307,6 +308,23 @@ async function load() {
   }
 }
 
+// Testmodus (nur für das eigene Konto): aus = ApeX wie ein normaler Nutzer, an = Test-Module (+ für Admins keine Limits)
+function paintTestMode(d) {
+  $('#testmode-on').checked = !!d.on;
+  $('#testmode-card').classList.toggle('on', !!d.on);
+  if (role !== 'admin') $('#testmode-hint').textContent = t('Aus: Du nutzt ApeX genau wie ein normaler Nutzer. An: Test-Module (Battle, Direkt …) im Chat. Dein Tageslimit bleibt gleich. Gilt nur für dein eigenes Konto.', 'Off: you use ApeX exactly like a normal user. On: test modules (Battle, Direct …) in the chat. Your daily limit stays the same. Only affects your own account.');
+  $('#testmode-state').textContent = d.on
+    ? (d.unlimited ? t('An: Test-Module und unbegrenzte Limits für dich.', 'On: test modules and unlimited limits for you.') : t('An: Test-Module für dich.', 'On: test modules for you.'))
+    : t('Aus: Du siehst ApeX wie ein normaler Nutzer.', 'Off: you see ApeX like a normal user.');
+  try { localStorage.setItem('apex-test-mode', d.on ? '1' : '0'); } catch { /* egal */ }
+}
+$('#testmode-on').addEventListener('change', async (e) => {
+  try {
+    const d = await api('test-mode', { on: e.target.checked });
+    paintTestMode(d);
+    toast(d.on ? t('Testmodus ist an.', 'Test mode is on.') : t('Testmodus ist aus.', 'Test mode is off.'));
+  } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+});
 $('#alarms-on').addEventListener('change', async (e) => {
   try { await api('alarms', { on: e.target.checked }); toast(e.target.checked ? t('Warnungen sind an.', 'Alarms are on.') : t('Warnungen sind aus.', 'Alarms are off.')); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
 });

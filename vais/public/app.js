@@ -89,6 +89,8 @@ const MODES = {
 };
 
 let isStaffUser = false;
+// Testmodus (nur Admins/Mods, im Admin-Bereich umschaltbar): erst dann gibt es Module, Bestenliste usw. Sonst: ApeX wie für alle.
+let isTestUser = false;
 const isAgentMode = (m) => m === 'agent' || m === 'life'; // Agentenchats verhalten sich wie ApeX
 
 const canSpeak = 'speechSynthesis' in window;
@@ -307,7 +309,7 @@ function renderPills() {
   const box = $('#mode-pills');
   if (!box) return;
   // Web/Bild/Code-Schnellwahl gibt es nur in den Admin-Modulen – ApeX entscheidet selbst, ob es sucht, malt oder programmiert
-  box.hidden = !!state.chat || !isStaffUser || isAgentMode(state.mode);
+  box.hidden = !!state.chat || !isTestUser || isAgentMode(state.mode);
   if (box.hidden) return;
   box.innerHTML = PILLS.map((p) => {
     const on = p.kind === 'mode' ? state.mode === 'agent' : !isAgentMode(state.mode) && state.modality === p.key;
@@ -338,16 +340,16 @@ $('#mode-pills')?.addEventListener('click', (e) => {
 });
 
 function renderControls() {
-  if (!isStaffUser && !state.chat) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX
+  if (!isTestUser && !state.chat) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX
   queueMicrotask(renderPills);
-  el.modeBtn.hidden = !isStaffUser; // Modul-Umschalter nur für Admins und Mods
+  el.modeBtn.hidden = !isTestUser; // Modul-Umschalter nur für Admins und Mods
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
-  el.modalityBtn.hidden = !isStaffUser || isAgentMode(state.mode);
+  el.modalityBtn.hidden = !isTestUser || isAgentMode(state.mode);
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
   el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
-    const show = isStaffUser && (state.mode === 'sxs' || (state.mode === 'direct' && slot === 0));
+    const show = isTestUser && (state.mode === 'sxs' || (state.mode === 'direct' && slot === 0));
     chip.hidden = !show;
     if (!show) return;
     const m = modelById(state.picks[slot]);
@@ -360,7 +362,7 @@ function renderControls() {
 }
 
 function renderModeMenu() {
-  el.modeMenu.innerHTML = Object.entries(MODES).filter(([, m]) => !m.staff || isStaffUser).map(([key, m]) => `
+  el.modeMenu.innerHTML = Object.entries(MODES).filter(([, m]) => !m.staff || isTestUser).map(([key, m]) => `
     <button type="button" class="mode-item" role="menuitemradio" aria-checked="${key === state.mode}" data-mode="${key}">
       ${ICON[key]}<span><b>${m.label}</b><small>${m.desc}</small></span>${key === state.mode ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
     </button>`).join('');
@@ -373,7 +375,7 @@ function toggleModeMenu(open = el.modeMenu.hidden) {
   if (open) $('.mode-item[aria-checked="true"]', el.modeMenu)?.focus();
 }
 
-el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!isStaffUser) return; el.modalityMenu.hidden = true; toggleModeMenu(); });
+el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!isTestUser) return; el.modalityMenu.hidden = true; toggleModeMenu(); });
 el.modeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('[data-mode]');
   if (!item) return;
@@ -919,9 +921,9 @@ function updateCard(turnIndex, side) {
   linkCites(body, a.sources);
 }
 
-// Kurze Lade-Sprüche, solange die KI noch nichts geschrieben hat („Kocht …“, „Cooked …“)
+// Kurze Lade-Sprüche, solange die KI noch nichts geschrieben hat („Kocht …“, „Brutzelt …“)
 const LOAD_WORDS = () => t(
-  ['Kocht …', 'Cooked …', 'Grübelt …', 'Tüftelt …', 'Zaubert …', 'Brodelt …', 'Knobelt …', 'Mixt …', 'Schmiedet …', 'Rechnet …', 'Funkt …', 'Sortiert …', 'Lädt Hirn …', 'Denkt …'],
+  ['Kocht …', 'Brutzelt …', 'Grübelt …', 'Tüftelt …', 'Zaubert …', 'Brodelt …', 'Knobelt …', 'Mixt …', 'Schmiedet …', 'Rechnet …', 'Funkt …', 'Sortiert …', 'Lädt Hirn …', 'Denkt …'],
   ['Cooking …', 'Cooked …', 'Brewing …', 'Crafting …', 'Thinking …', 'Plotting …', 'Mixing …', 'Forging …', 'Vibing …', 'Loading brain …'],
 );
 let loadIdx = Math.floor(Math.random() * 10);
@@ -1225,7 +1227,7 @@ async function send() {
   }
 
   if (!state.chat) {
-    if (!isStaffUser) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX (der Server erzwingt das auch)
+    if (!isTestUser) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX (der Server erzwingt das auch)
     if (state.mode === 'sxs' || state.mode === 'direct') {
       const need = state.mode === 'sxs' ? 2 : 1;
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
@@ -2970,7 +2972,7 @@ function resumeLast() {
 async function route() {
   const h = location.hash;
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
-  if (h === '#bestenliste') { if (isStaffUser) return showBoard(); history.replaceState(null, '', location.pathname); } // Modell-Bestenliste nur intern
+  if (h === '#bestenliste') { if (isTestUser) return showBoard(); history.replaceState(null, '', location.pathname); } // Modell-Bestenliste nur intern
   if (h === '#statistik') return showStats();
   if (h === '#kontostand') return showKonto();
   if (h === '#geraete') {
@@ -3511,7 +3513,7 @@ function renderUsage(u) {
     box.innerHTML = `
       <div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span></div>
       <div class="usage-rows">${rows}</div>
-      <p class="usage-sub"><span class="usage-note ${level}">${note}</span>${isStaffUser ? `<span>${t('Ein Battle zählt als 2 Antworten.', 'A battle counts as 2 answers.')}</span>` : ''}</p>`;
+      <p class="usage-sub"><span class="usage-note ${level}">${note}</span>${isTestUser ? `<span>${t('Ein Battle zählt als 2 Antworten.', 'A battle counts as 2 answers.')}</span>` : ''}</p>`;
   }
   box.hidden = false;
 }
@@ -3532,7 +3534,7 @@ async function showStats() {
     const tiles = [
       [d.chats, t('Chats', 'Chats')],
       [d.questions, t('Fragen gestellt', 'Questions asked')],
-      ...(isStaffUser ? [[d.votes, t('Battle-Stimmen', 'Battle votes')]] : []),
+      ...(isTestUser ? [[d.votes, t('Battle-Stimmen', 'Battle votes')]] : []),
       [d.likes, t('Antworten mit 👍', 'Answers with 👍')],
     ];
     renderUsage(d.usage);
@@ -3995,12 +3997,13 @@ async function showAnnouncements() {
 function addAdminLinks(mod) {
   if ($('#open-admin')) return;
   const shield = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>';
-  const label = mod ? t('Moderation', 'Moderation') : 'Admin';
+  const label = (mod ? t('Moderation', 'Moderation') : 'Admin') + (isTestUser ? t(' · Testmodus', ' · Test mode') : '');
   const menu = Object.assign(document.createElement('a'), { className: 'menu-item', id: 'open-admin', href: '/admin' });
   menu.innerHTML = `${shield}<span>${label}</span>`;
   $('#logout')?.before(menu);
   const drawer = Object.assign(document.createElement('a'), { className: 'drawer-item', id: 'd-admin', href: '/admin' });
-  drawer.innerHTML = `${shield.replace(' width="18" height="18"', '')}<span>${mod ? label : t('Admin-Bereich', 'Admin panel')}</span>`;
+  const testTag = isTestUser ? t(' · Testmodus', ' · Test mode') : '';
+  drawer.innerHTML = `${shield.replace(' width="18" height="18"', '')}<span>${mod ? label : t('Admin-Bereich', 'Admin panel') + testTag}</span>`;
   $('#d-team')?.after(drawer);
   const set = Object.assign(document.createElement('a'), { className: 'btn ghost-btn set-admin', id: 'set-admin', href: '/admin', textContent: mod ? t('Moderation öffnen', 'Open moderation') : t('Admin-Bereich öffnen', 'Open admin panel') });
   $('#set-email')?.after(set);
@@ -4042,7 +4045,15 @@ async function init() {
   }
   // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
   // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
-  if (user.admin === true || user.mod === true) { addAdminLinks(user.mod === true); isStaffUser = true; document.body.classList.add('is-staff'); }
+  if (user.admin === true || user.mod === true) {
+    isStaffUser = true;
+    isTestUser = user.testMode === true; // Testmodus aus → ApeX genau wie für normale Nutzer
+    document.body.classList.toggle('is-staff', isTestUser);
+    document.body.classList.toggle('test-mode', isTestUser);
+    addAdminLinks(user.mod === true);
+    // Testmodus im Admin-Bereich (anderer Tab) umgeschaltet → Chat neu laden, damit er passt
+    window.addEventListener('storage', (e) => { if (e.key === 'apex-test-mode' && (e.newValue === '1') !== isTestUser) location.reload(); });
+  }
   // Verlauf schon im Hintergrund holen, damit die Seitenleiste sofort die Titel zeigt
   setTimeout(() => { if (historyDirty) fetchHistory(); }, 1200);
   $('#d-avatar').textContent = user.email[0].toUpperCase();

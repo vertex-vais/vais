@@ -59,6 +59,7 @@ async function signUpTester(email) {
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
   const id = (await a.json('/api/admin/users')).data.users.find((u) => u.email === email).id;
   assert.equal((await a.json('/api/admin/role', { userId: id, role: 'mod' })).status, 200);
+  assert.equal((await c.json('/api/admin/test-mode', { on: true })).data.on, true); // Module gibt es nur im Testmodus
   return c;
 }
 async function stream(c, chatId, text, turn = 0) {
@@ -131,6 +132,82 @@ test('Admin-Bereich nur für Admins', async () => {
   // Schlüssel werden nie im Klartext gezeigt
   const keys = (await a.json('/api/admin/keys')).data.providers;
   assert.ok(Array.isArray(keys));
+});
+
+test('Testmodus aus: Admin erlebt ApeX wie ein normaler Nutzer (nur ApeX, normale Limits)', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  assert.equal((await a.json('/api/admin/test-mode', { on: false })).data.on, false);
+  const me = (await a.json('/api/auth/me')).data.user;
+  assert.equal(me.admin, true); // Admin-Bereich bleibt erreichbar
+  assert.equal(me.testMode, false);
+  assert.equal(me.unlimited, undefined);
+  assert.equal((await a.json('/api/admin/overview')).data.testMode, false);
+  // nur ApeX – der Server erzwingt es, egal was geschickt wird
+  const models = (await a.json('/api/chat/models')).data;
+  assert.equal(models.apexOnly, true);
+  assert.deepEqual(models.models.map((m) => m.id), ['agent']);
+  const start = await a.json('/api/chat/start', { mode: 'battle', modality: 'text', title: 'x' });
+  assert.equal(start.status, 200);
+  assert.equal((await a.json(`/api/chat/${start.data.id}`)).data.mode, 'agent');
+  const life = await a.json('/api/chat/start', { mode: 'life', title: 'x' });
+  assert.equal((await a.json(`/api/chat/${life.data.id}`)).data.mode, 'agent');
+  assert.equal((await a.json('/api/chat/leaderboard')).status, 404);
+  // gleiche Limits wie alle
+  const usage = (await a.json('/api/chat/usage')).data;
+  assert.equal(usage.unlimited, false);
+  assert.equal(usage.kinds.agent.limit, 15);
+  assert.equal((await a.json('/api/admin/limits', { limits: { agent: 1 } })).status, 200);
+  try {
+    assert.equal((await stream(a, start.data.id, 'Erzähl mir einen Witz', 0)).status, 200);
+    const res = await a.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Und noch einen Witz bitte' }], display: { text: 'Und noch einen Witz bitte' } });
+    assert.equal(res.status, 429);
+  } finally {
+    await a.json('/api/admin/limits', { limits: { agent: 15 } });
+  }
+});
+
+test('Testmodus an: Admin hat Module und keine Limits', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const on = (await a.json('/api/admin/test-mode', { on: true })).data;
+  assert.equal(on.on, true);
+  assert.equal(on.unlimited, true);
+  assert.equal((await a.json('/api/admin/test-mode')).data.on, true); // bleibt gespeichert
+  const me = (await a.json('/api/auth/me')).data.user;
+  assert.equal(me.testMode, true);
+  assert.equal(me.unlimited, true);
+  const models = (await a.json('/api/chat/models')).data;
+  assert.ok(!models.apexOnly);
+  const first = models.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  assert.ok(first);
+  const start = await a.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'T' });
+  assert.equal(start.status, 200);
+  assert.equal((await a.json(`/api/chat/${start.data.id}`)).data.mode, 'direct');
+  assert.equal((await a.json('/api/chat/usage')).data.unlimited, true);
+  assert.equal((await a.json('/api/admin/limits', { limits: { text: 1, burst: 1 } })).status, 200);
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await stream(a, start.data.id, `Frage ${i}`, i)).status, 200);
+  } finally {
+    await a.json('/api/admin/limits', { limits: { text: 100, burst: 40 } });
+  }
+  // wieder aus → sofort wie normaler Nutzer
+  assert.equal((await a.json('/api/admin/test-mode', { on: false })).data.on, false);
+  assert.equal((await a.json('/api/chat/models')).data.apexOnly, true);
+  assert.equal((await a.json('/api/chat/usage')).data.unlimited, false);
+});
+
+test('Testmodus: Mods bekommen Module, aber kein unbegrenztes Limit; normale Nutzer können ihn nicht setzen', async () => {
+  const m = await signUpTester('tmod@example.com');
+  const me = (await m.json('/api/auth/me')).data.user;
+  assert.equal(me.testMode, true);
+  assert.equal(me.unlimited, undefined);
+  assert.ok(!(await m.json('/api/chat/models')).data.apexOnly);
+  assert.equal((await m.json('/api/chat/usage')).data.unlimited, false);
+  const u = await signUp('notest@example.com');
+  assert.equal((await u.json('/api/admin/test-mode', { on: true })).status, 404);
+  assert.equal((await u.json('/api/auth/me')).data.user.testMode, undefined);
+  assert.equal((await u.json('/api/chat/models')).data.apexOnly, true);
 });
 
 test('Gesperrte Nutzer kommen nicht mehr rein', async () => {
@@ -742,5 +819,11 @@ test('Startseite und Tour: eine KI, keine Modell-Auswahl für normale Nutzer', a
   const css = await (await fetch(`${BASE}/app.css`)).text();
   assert.match(css, /body:not\(\.is-staff\) \.staff-only/);
   const app = await (await fetch(`${BASE}/app.js`)).text();
-  assert.match(app, /el\.modeBtn\.hidden = !isStaffUser/);
+  assert.match(app, /el\.modeBtn\.hidden = !isTestUser/); // nur Admins/Mods im Testmodus
+  assert.match(app, /isTestUser = user\.testMode === true/);
+  // Deutsch zuerst: Browsersprache entscheidet nicht, nur eine selbst gewählte Sprache
+  const boot = await (await fetch(`${BASE}/boot.js`)).text();
+  assert.doesNotMatch(boot, /navigator\.language/);
+  const en = await fetch(`${BASE}/api/auth/me`, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
+  assert.match((await en.json()).error, /Nicht angemeldet/);
 });

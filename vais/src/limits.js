@@ -3,7 +3,7 @@
 import { get, run, all, getSetting, setSetting } from './db.js';
 import { t } from './i18n.js';
 import { HttpError } from './auth.js';
-import { isAdmin } from './config.js';
+import { isUnlimited } from './config.js';
 
 // Wie viele Antworten jeder pro Tag bekommt – getrennt nach Art (keine Punkte mehr)
 export const LIMIT_FIELDS = {
@@ -58,8 +58,9 @@ export function nextReset() {
 }
 
 // Eigenes Limit eines Nutzers (vom Admin): null = Standard, -1 = unbegrenzt, sonst Prozent vom Standard (200 = doppelt)
+// Admins sind nur im Testmodus unbegrenzt – sonst gelten für sie dieselben Limits wie für alle
 async function userFactor(user) {
-  if (isAdmin(user)) return null;
+  if (isUnlimited(user)) return null;
   const own = (await get('SELECT daily_limit FROM users WHERE id = ?', user.id))?.daily_limit;
   if (own === -1 || own === '-1') return null;
   return own === null || own === undefined ? 1 : Math.max(0, Number(own)) / 100;
