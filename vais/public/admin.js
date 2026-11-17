@@ -6,7 +6,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => Number(n).toLocaleString(LOCALE);
 const when = (ts) => new Date(ts).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-const MODE = { agent: 'ApeX', battle: 'Battle', sxs: t('Nebeneinander', 'Side by side'), direct: t('Direkt', 'Direct') };
+const MODE = { agent: 'Agent X', battle: 'Battle', sxs: t('Nebeneinander', 'Side by side'), direct: t('Direkt', 'Direct') };
 
 let toastTimer;
 function toast(msg) {
@@ -410,7 +410,7 @@ const LIMIT_LABELS = {
   text: [t('Antworten pro Tag', 'Answers per day'), t('normale Antworten, Übersetzer – ein Battle zählt 2', 'normal answers, translator – a battle counts 2')],
   web: [t('Websuchen pro Tag', 'Web searches per day'), t('Antworten mit Internet-Suche', 'answers with internet search')],
   image: [t('Bilder pro Tag', 'Images per day'), t('erstellte oder bearbeitete Bilder', 'created or edited images')],
-  agent: [t('ApeX pro Tag', 'ApeX per day'), t('Aufträge (Webseiten, Recherchen …)', 'tasks (websites, research …)')],
+  agent: [t('Agent X pro Tag', 'Agent X per day'), t('Aufträge (Webseiten, Recherchen …)', 'tasks (websites, research …)')],
   paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten von Premium-Modellen', 'answers from premium models')],
   burst: [t('Schutz vor Spam', 'Spam protection'), t('Antworten in 5 Minuten', 'answers in 5 minutes')],
   maxChats: [t('Chats pro Person', 'Chats per person'), t('gespeichert, 0 = unbegrenzt', 'saved, 0 = unlimited')],
@@ -419,8 +419,8 @@ let limitsCache = null;
 function limitExample() {
   const f = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value) || 0]));
   $('#limit-example').textContent = t(
-    `Jeder bekommt pro Tag ${num(f.text)} Antworten (= ${num(Math.floor(f.text / 2))} Battles), ${num(f.web)} Websuchen, ${num(f.image)} Bilder und ${num(f.agent)} ApeX-Aufträge. Jede Art hat ihren eigenen Zähler.`,
-    `Everyone gets ${num(f.text)} answers (= ${num(Math.floor(f.text / 2))} battles), ${num(f.web)} web searches, ${num(f.image)} images and ${num(f.agent)} ApeX tasks per day. Each type has its own counter.`,
+    `Jeder bekommt pro Tag ${num(f.text)} Antworten (= ${num(Math.floor(f.text / 2))} Battles), ${num(f.web)} Websuchen, ${num(f.image)} Bilder und ${num(f.agent)} Agent-X-Aufträge. Jede Art hat ihren eigenen Zähler.`,
+    `Everyone gets ${num(f.text)} answers (= ${num(Math.floor(f.text / 2))} battles), ${num(f.web)} web searches, ${num(f.image)} images and ${num(f.agent)} Agent X tasks per day. Each type has its own counter.`,
   );
 }
 async function loadLimits() {

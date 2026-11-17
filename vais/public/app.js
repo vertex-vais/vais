@@ -78,18 +78,17 @@ Object.assign(ICON, {
   life: svg('<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.3-6 6.5-6s5.7 2.4 6.5 6"/><path d="M18.5 3l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/>'),
 });
 
-// ApeX ist die eine KI für alle. Die übrigen Module sind Test-Werkzeuge nur für Admins und Mods
-// (kleiner Umschalter im Eingabefeld, siehe renderModeMenu) – normale Nutzer sehen sie nirgends.
 const MODES = {
-  agent: { label: 'ApeX', desc: t('Standard – so chatten alle Nutzer', 'Default – what every user chats with') },
-  life: { label: t('Agentenchats', 'Agent chats'), desc: t('Admin-Test: offen und persönlich, mit Gedächtnis', 'Admin test: open and personal, with memory'), staff: true },
-  battle: { label: 'Battle', desc: t('Admin-Test: 2 anonyme Modelle im Vergleich', 'Admin test: 2 anonymous models head to head'), staff: true },
-  sxs: { label: 'Side by Side', desc: t('Admin-Test: 2 Modelle vergleichen', 'Admin test: compare 2 models'), staff: true },
-  direct: { label: t('Direkt', 'Direct'), desc: t('Admin-Test: mit 1 Modell chatten', 'Admin test: chat with 1 model'), staff: true },
+  agent: { label: 'Agent X', desc: t('Sucht, liest und rechnet selbstständig – der stärkste Modus', 'Searches, reads and calculates on its own – the strongest mode') },
+  // nur für Mods und Admins sichtbar (siehe renderModeMenu)
+  life: { label: t('Agentenchats', 'Agent chats'), desc: t('Offen und persönlich – lernt deinen Alltag kennen und merkt sich Dinge über dich', 'Open and personal – gets to know your daily life and remembers things about you'), staff: true },
+  battle: { label: 'Battle', desc: t('2 anonyme Modelle im Vergleich', '2 anonymous models head to head') },
+  sxs: { label: 'Side by Side', desc: t('2 Modelle deiner Wahl vergleichen', 'Compare 2 models of your choice') },
+  direct: { label: t('Direkt', 'Direct'), desc: t('Mit 1 Modell chatten', 'Chat with 1 model') },
 };
 
 let isStaffUser = false;
-const isAgentMode = (m) => m === 'agent' || m === 'life'; // Agentenchats verhalten sich wie ApeX
+const isAgentMode = (m) => m === 'agent' || m === 'life'; // Agentenchats verhalten sich wie Agent X
 
 const canSpeak = 'speechSynthesis' in window;
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -251,7 +250,7 @@ function modelLogo(m) {
 
 // ── Zustand ───────────────────────────────────────────────────────
 const state = {
-  mode: 'agent', // beim Start immer ApeX (umschalten geht jederzeit über den Modus-Knopf)
+  mode: 'agent', // beim Start immer Agent X (umschalten geht jederzeit über den Modus-Knopf)
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
@@ -296,7 +295,7 @@ const busy = () => state.controllers.size > 0;
 const modelById = (id) => state.models.find((m) => m.id === id);
 
 // ── Steuerung unten (Modus + Modelle) ─────────────────────────────
-// Schnellwahl unter dem Eingabefeld (nur auf der Startseite): Websuche, Bild, Code, ApeX
+// Schnellwahl unter dem Eingabefeld (nur auf der Startseite): Websuche, Bild, Code, Agent X
 const PILLS = [
   { key: 'web', kind: 'modality', ico: '🌐', label: () => 'Web' },
   { key: 'image', kind: 'modality', ico: '🎨', label: () => t('Bild', 'Image') },
@@ -306,9 +305,8 @@ let modeBeforeAgent = null;
 function renderPills() {
   const box = $('#mode-pills');
   if (!box) return;
-  // Web/Bild/Code-Schnellwahl gibt es nur in den Admin-Modulen – ApeX entscheidet selbst, ob es sucht, malt oder programmiert
-  box.hidden = !!state.chat || !isStaffUser || isAgentMode(state.mode);
-  if (box.hidden) return;
+  box.hidden = !!state.chat;
+  if (state.chat) return;
   box.innerHTML = PILLS.map((p) => {
     const on = p.kind === 'mode' ? state.mode === 'agent' : !isAgentMode(state.mode) && state.modality === p.key;
     return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
@@ -320,7 +318,7 @@ $('#mode-pills')?.addEventListener('click', (e) => {
   const pill = PILLS.find((p) => p.key === b.dataset.pill);
   haptic('tap');
   if (pill.kind === 'mode') {
-    // ApeX an/aus (danach wieder der vorige Modus)
+    // Agent X an/aus (danach wieder der vorige Modus)
     const next = state.mode === 'agent' ? (modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct') : 'agent';
     if (next === 'agent') modeBeforeAgent = state.mode;
     state.mode = next;
@@ -338,16 +336,14 @@ $('#mode-pills')?.addEventListener('click', (e) => {
 });
 
 function renderControls() {
-  if (!isStaffUser && !state.chat) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX
   queueMicrotask(renderPills);
-  el.modeBtn.hidden = !isStaffUser; // Modul-Umschalter nur für Admins und Mods
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
-  el.modalityBtn.hidden = !isStaffUser || isAgentMode(state.mode);
+  el.modalityBtn.hidden = isAgentMode(state.mode);
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
   el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
-    const show = isStaffUser && (state.mode === 'sxs' || (state.mode === 'direct' && slot === 0));
+    const show = state.mode === 'sxs' || (state.mode === 'direct' && slot === 0);
     chip.hidden = !show;
     if (!show) return;
     const m = modelById(state.picks[slot]);
@@ -373,7 +369,7 @@ function toggleModeMenu(open = el.modeMenu.hidden) {
   if (open) $('.mode-item[aria-checked="true"]', el.modeMenu)?.focus();
 }
 
-el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!isStaffUser) return; el.modalityMenu.hidden = true; toggleModeMenu(); });
+el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); el.modalityMenu.hidden = true; toggleModeMenu(); });
 el.modeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('[data-mode]');
   if (!item) return;
@@ -408,7 +404,7 @@ function toggleModalityMenu(open = el.modalityMenu.hidden) {
 // Gewählte Modelle passend zur Art machen (z. B. bei „Websuche“ nur Such-Modelle)
 function fitPicks() {
   const cap = currentCap();
-  const fitting = state.models.filter((m) => m.caps.includes(cap) && !m.agent); // ApeX nur, wenn man ihn selbst wählt
+  const fitting = state.models.filter((m) => m.caps.includes(cap) && !m.agent); // Agent X nur, wenn man ihn selbst wählt
   [0, 1].forEach((slot) => {
     if (modelById(state.picks[slot])?.caps.includes(cap)) return;
     state.picks[slot] = fitting.find((m) => m.id !== state.picks[1 - slot])?.id ?? state.picks[slot];
@@ -490,7 +486,7 @@ el.sheet.addEventListener('click', (e) => {
 
 // ── Chat ──────────────────────────────────────────────────────────
 function labelFor(chat, side) {
-  if (isAgentMode(chat.mode)) return 'ApeX';
+  if (isAgentMode(chat.mode)) return 'Agent X';
   if (chat.mode === 'battle') return chat.names ? chat.names[side] : `${t('Assistent', 'Assistant')} ${'AB'[side]}`;
   return chat.labels[side];
 }
@@ -691,7 +687,7 @@ function renderTurn(turnIndex) {
                 <button class="card-btn" data-act="speak" aria-label="${t('Vorlesen', 'Read aloud')}" title="${t('Vorlesen', 'Read aloud')}" aria-pressed="false"${canSpeak ? '' : ' hidden'}>${ICON.speak}</button>
                 <button class="card-btn" data-act="preview" aria-label="${t('Vorschau', 'Preview')}" title="${t('Vorschau', 'Preview')}" hidden>${ICON.preview}</button>
                 <button class="card-btn" data-act="expand" aria-label="${t('Vollbild', 'Full screen')}" title="${t('Vollbild', 'Full screen')}">${ICON.expand}</button>`;
-          // Einzel-Antwort (Direkt, ApeX): Knöpfe unter der Nachricht wie bei Arena, mit 👍/👎
+          // Einzel-Antwort (Direkt, Agent X): Knöpfe unter der Nachricht wie bei Arena, mit 👍/👎
           return n === 1 ? `
           <article class="card" data-side="${side}">
             <header class="card-head"><span class="card-label"></span></header>
@@ -807,7 +803,7 @@ function paintLabel(card, side) {
   }
 }
 
-// Emoji-Reaktion von ApeX an deiner Nachricht (wie im Messenger)
+// Emoji-Reaktion von Agent X an deiner Nachricht (wie im Messenger)
 function paintReactions(turnIndex) {
   const node = el.thread.querySelector(`.turn[data-index="${turnIndex}"]`);
   const turn = state.chat?.turns[turnIndex];
@@ -824,7 +820,7 @@ function paintReactions(turnIndex) {
   const now = box.dataset.e || '';
   if (now === emojis.join('')) return;
   box.dataset.e = emojis.join('');
-  box.innerHTML = emojis.map((e) => `<span class="reaction" role="img" aria-label="${t('ApeX reagiert mit', 'ApeX reacted with')} ${e}">${e}</span>`).join('');
+  box.innerHTML = emojis.map((e) => `<span class="reaction" role="img" aria-label="${t('Agent X reagiert mit', 'Agent X reacted with')} ${e}">${e}</span>`).join('');
   box.classList.remove('pop');
   void box.offsetWidth;
   box.classList.add('pop');
@@ -1017,7 +1013,7 @@ function renderSources(card, a) {
   });
 }
 
-// Arbeitsschritte von ApeX über der Antwort anzeigen
+// Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_EN = { draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
 const STEP_DE = { draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
@@ -1176,7 +1172,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
     if (document.visibilityState === 'visible') haptic(got ? 'success' : 'error'); // Antwort fertig
   } catch (err) {
     flushText(a);
-    const agentSide = isAgentMode(chat.mode) || (chat.labels?.[side] === 'ApeX');
+    const agentSide = isAgentMode(chat.mode) || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
     else if (err instanceof TypeError || /unterbrochen|interrupted|network|load failed/i.test(err.message)) {
       // Verbindung weg – der Server schreibt die Antwort trotzdem fertig, wir holen sie gleich nach
@@ -1225,7 +1221,6 @@ async function send() {
   }
 
   if (!state.chat) {
-    if (!isStaffUser) { state.mode = 'agent'; state.modality = 'auto'; } // normale Nutzer: immer ApeX (der Server erzwingt das auch)
     if (state.mode === 'sxs' || state.mode === 'direct') {
       const need = state.mode === 'sxs' ? 2 : 1;
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
@@ -1357,7 +1352,7 @@ function renderQueue() {
     box.className = 'queue';
   }
   el.thread.after(box);
-  const agentRunning = isAgentMode(state.chat?.mode) || state.chat?.labels?.includes?.('ApeX');
+  const agentRunning = isAgentMode(state.chat?.mode) || state.chat?.labels?.includes?.('Agent X');
   box.innerHTML = items.map((q) => `
     <div class="queued" data-q="${q.id}">
       <div class="bubble"><span></span>${q.attachments.length ? `<small>📎 ${q.attachments.length}</small>` : ''}</div>
@@ -1395,7 +1390,7 @@ document.addEventListener('click', async (e) => {
   if (!item || !chat) return;
   const ti = chat.turns.length - 1;
   if (busy() && !item.attachments.length) {
-    // ApeX: Nachricht direkt in die laufende Arbeit geben
+    // Agent X: Nachricht direkt in die laufende Arbeit geben
     try {
       const data = await post('/api/chat/inject', { chatId: chat.id, turn: ti, text: item.text });
       if (data.injected) {
@@ -1404,7 +1399,7 @@ document.addEventListener('click', async (e) => {
         const bubble = el.thread.querySelector(`.turn[data-index="${ti}"] .turn-user .bubble`);
         if (bubble) bubble.append(Object.assign(document.createElement('span'), { className: 'addon', textContent: `➕ ${item.text}` }));
         haptic('success');
-        toast(t('ApeX berücksichtigt das jetzt ✓', 'ApeX is taking this into account ✓'));
+        toast(t('Agent X berücksichtigt das jetzt ✓', 'Agent X is taking this into account ✓'));
         return renderQueue();
       }
     } catch { /* dann eben neu senden */ }
@@ -1485,7 +1480,7 @@ async function loadExtras(chat, index) {
 
 const clearFollowups = () => el.thread.querySelectorAll('.followups').forEach((n) => n.remove());
 
-// Plan von ApeX bestätigen oder ändern (nur beim neuesten Plan)
+// Plan von Agent X bestätigen oder ändern (nur beim neuesten Plan)
 el.thread.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-plan]');
   if (!btn) return;
@@ -1503,7 +1498,7 @@ el.thread.addEventListener('click', (e) => {
   }
 });
 
-// Rückfragen von ApeX beantworten: eine Frage nach der anderen, „Weiter“, am Ende senden
+// Rückfragen von Agent X beantworten: eine Frage nach der anderen, „Weiter“, am Ende senden
 const qAnswer = (item) => {
   const picked = [...item.querySelectorAll('.q-chip[aria-pressed="true"]')].map((c) => c.textContent);
   const own = item.querySelector('.q-input')?.value.trim();
@@ -2881,7 +2876,7 @@ el.prompt.addEventListener('keydown', (e) => {
   }
 });
 function stopAnswers() {
-  // ApeX läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
+  // Agent X läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
   const chat = state.chat;
   const ti = chat ? chat.turns.length - 1 : -1;
   chat?.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
@@ -2970,7 +2965,7 @@ function resumeLast() {
 async function route() {
   const h = location.hash;
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
-  if (h === '#bestenliste') { if (isStaffUser) return showBoard(); history.replaceState(null, '', location.pathname); } // Modell-Bestenliste nur intern
+  if (h === '#bestenliste') return showBoard();
   if (h === '#statistik') return showStats();
   if (h === '#kontostand') return showKonto();
   if (h === '#geraete') {
@@ -3043,7 +3038,7 @@ async function loadChat(id) {
   if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id, isAgentMode(data.mode));
 }
 
-// ApeX arbeitet im Hintergrund: alle paar Sekunden nachsehen, bis er fertig ist
+// Agent X arbeitet im Hintergrund: alle paar Sekunden nachsehen, bis er fertig ist
 let bgTimer = null;
 function watchBackground(id, agent = true) {
   clearTimeout(bgTimer);
@@ -3053,7 +3048,7 @@ function watchBackground(id, agent = true) {
       const p = document.createElement('p');
       p.className = 'bg-note';
       p.textContent = agent
-        ? t('ApeX arbeitet im Hintergrund weiter. Du kannst die App schließen – mit eingeschalteten Erinnerungen bekommst du eine Benachrichtigung, wenn er fertig ist.', 'ApeX keeps working in the background. You can close the app – with notifications on, you will be notified when he is done.')
+        ? t('Agent X arbeitet im Hintergrund weiter. Du kannst die App schließen – mit eingeschalteten Erinnerungen bekommst du eine Benachrichtigung, wenn er fertig ist.', 'Agent X keeps working in the background. You can close the app – with notifications on, you will be notified when he is done.')
         : t('📶 Verbindung kurz weg – die Antwort wird trotzdem fertig geschrieben und gleich nachgeladen.', '📶 Connection dropped – the answer is still being finished and will load in a moment.');
       $('.card-body', card).before(p);
     }
@@ -3488,11 +3483,11 @@ $('#share-stop').addEventListener('click', async () => {
 $('#share-link').addEventListener('focus', (e) => e.target.select());
 
 // ── Meine Statistik ───────────────────────────────────────────────
-// Tagesverbrauch: je Art ein Balken von 0 bis 100 % (Antworten, Websuchen, Bilder, ApeX)
+// Tagesverbrauch: je Art ein Balken von 0 bis 100 % (Antworten, Websuchen, Bilder, Agent X)
 function renderUsage(u) {
   const box = $('#usage-card');
   if (!u?.kinds) { box.hidden = true; return; }
-  const NAMES = { text: [t('Antworten', 'Answers'), '💬'], web: [t('Websuchen', 'Web searches'), '🌐'], image: [t('Bilder', 'Images'), '🎨'], agent: ['ApeX', '🤖'] };
+  const NAMES = { text: [t('Antworten', 'Answers'), '💬'], web: [t('Websuchen', 'Web searches'), '🌐'], image: [t('Bilder', 'Images'), '🎨'], agent: ['Agent X', '🤖'] };
   if (u.unlimited) {
     const total = Object.values(u.kinds).reduce((a, k) => a + k.used, 0);
     box.innerHTML = `<div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>∞</b></div>
@@ -3532,7 +3527,7 @@ async function showStats() {
     const tiles = [
       [d.chats, t('Chats', 'Chats')],
       [d.questions, t('Fragen gestellt', 'Questions asked')],
-      ...(isStaffUser ? [[d.votes, t('Battle-Stimmen', 'Battle votes')]] : []),
+      [d.votes, t('Battle-Stimmen', 'Battle votes')],
       [d.likes, t('Antworten mit 👍', 'Answers with 👍')],
     ];
     renderUsage(d.usage);
@@ -3678,7 +3673,7 @@ function renderMemories() {
   const items = profileData?.memories ?? [];
   $('#set-memory-clear').hidden = !items.length;
   if (!items.length) {
-    list.innerHTML = `<li class="mem-empty">${profileData?.memoryOn ? t('Noch nichts gemerkt. Erzähl ApeX etwas über dich, z. B. „Merk dir, dass ich Fußball mag“.', 'Nothing yet. Tell ApeX something about you, e.g. “Remember that I like football”.') : t('Das Gedächtnis ist aus.', 'Memory is off.')}</li>`;
+    list.innerHTML = `<li class="mem-empty">${profileData?.memoryOn ? t('Noch nichts gemerkt. Erzähl Agent X etwas über dich, z. B. „Merk dir, dass ich Fußball mag“.', 'Nothing yet. Tell Agent X something about you, e.g. “Remember that I like football”.') : t('Das Gedächtnis ist aus.', 'Memory is off.')}</li>`;
     return;
   }
   list.innerHTML = items.map((m) => `<li><span></span><button type="button" class="mem-del" data-mem="${m.id}" aria-label="${t('Vergessen', 'Forget')}" title="${t('Vergessen', 'Forget')}">×</button></li>`).join('');
@@ -3713,7 +3708,7 @@ $('#set-memories').addEventListener('click', async (e) => {
   } catch (err) { toast(err.message); }
 });
 $('#set-memory-clear').addEventListener('click', async () => {
-  if (!confirm(t('Alles vergessen, was ApeX über dich weiß?', 'Forget everything ApeX knows about you?'))) return;
+  if (!confirm(t('Alles vergessen, was Agent X über dich weiß?', 'Forget everything Agent X knows about you?'))) return;
   try { await post('/api/chat/profile/memory/clear', {}); profileData.memories = []; renderMemories(); } catch (err) { toast(err.message); }
 });
 
@@ -3753,7 +3748,7 @@ async function loadPush() {
     on.hidden = true;
     text.textContent = t('Benachrichtigungen sind blockiert. Erlaube sie in den Browser- bzw. Handy-Einstellungen für diese Seite.', 'Notifications are blocked. Allow them for this site in your browser or phone settings.');
   } else if (granted) {
-    text.textContent = t('✓ Benachrichtigungen sind an. Sag ApeX z. B. „Erinnere mich morgen um 8 an Mathe“.', '✓ Notifications are on. Tell ApeX e.g. “Remind me tomorrow at 8 about maths”.');
+    text.textContent = t('✓ Benachrichtigungen sind an. Sag Agent X z. B. „Erinnere mich morgen um 8 an Mathe“.', '✓ Notifications are on. Tell Agent X e.g. “Remind me tomorrow at 8 about maths”.');
   }
   const list = $('#set-reminders');
   const items = pushInfo.reminders ?? [];
@@ -4042,7 +4037,7 @@ async function init() {
   }
   // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
   // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
-  if (user.admin === true || user.mod === true) { addAdminLinks(user.mod === true); isStaffUser = true; document.body.classList.add('is-staff'); }
+  if (user.admin === true || user.mod === true) { addAdminLinks(user.mod === true); isStaffUser = true; }
   // Verlauf schon im Hintergrund holen, damit die Seitenleiste sofort die Titel zeigt
   setTimeout(() => { if (historyDirty) fetchHistory(); }, 1200);
   $('#d-avatar').textContent = user.email[0].toUpperCase();
@@ -4092,7 +4087,7 @@ async function init() {
 function showWelcome() {
   post('/api/auth/welcomed', {}).catch(() => {}); // sofort merken – auch wenn man die Seite gleich schließt
   const ideas = [
-    ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('ApeX fragt kurz nach und baut sie.', 'ApeX asks a few questions and builds it.')],
+    ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('Agent X fragt kurz nach und baut sie.', 'Agent X asks a few questions and builds it.')],
     ['🧠', t('Erklär mir schwarze Löcher, als wäre ich 12', 'Explain black holes like I am 12'), t('Verständlich, mit Beispielen.', 'Easy to follow, with examples.')],
     ['📽️', t('Mach mir eine Präsentation über den Mond', 'Make me a presentation about the moon'), t('Schöne Folien zum Wischen.', 'Beautiful slides to swipe through.')],
   ];
