@@ -5,7 +5,7 @@ import { markdown, enhance } from './render.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
 
-const MODE = { agent: 'Agent X', battle: 'Battle', sxs: 'Side by Side', direct: t('Direkt', 'Direct') };
+const MODE = { agent: 'ApeX', battle: 'Battle', sxs: 'Side by Side', direct: t('Direkt', 'Direct') };
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -15,7 +15,7 @@ function el(tag, cls, text) {
 }
 
 function label(chat, side) {
-  if (chat.mode === 'agent') return 'Agent X';
+  if (chat.mode === 'agent') return 'ApeX';
   if (chat.labels?.[side]) return chat.labels[side];
   return `${t('Assistent', 'Assistant')} ${'AB'[side]}`;
 }

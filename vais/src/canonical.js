@@ -24,7 +24,10 @@ export function publicOrigin(req, env = process.env) {
 
 const SKIP = new Set(['/healthz', '/api/status']);
 
-// 301 zur kanonischen Adresse, wenn der Host nicht übereinstimmt.
+// Umleitung (302) zur kanonischen Adresse, wenn der Host nicht übereinstimmt.
+// Bewusst kein 301: Browser (vor allem Safari auf dem iPhone) merken sich 301 dauerhaft.
+// Ändert sich die Adresse später wieder oder wird ein Dienst gelöscht, landen Nutzer sonst
+// für immer auf einer toten Adresse (Render zeigt dann nur „Not Found“).
 // Ausnahmen: Gesundheits-Checks, Status, Telegram-Webhook und alle nicht-GET/HEAD-Anfragen.
 export function canonicalRedirect(req, res, next) {
   const canonical = parseCanonical();
@@ -35,5 +38,6 @@ export function canonicalRedirect(req, res, next) {
   const got = String(req.get('host') || '').toLowerCase();
   const want = new URL(canonical).host.toLowerCase();
   if (!got || got === want) return next();
-  return res.redirect(301, canonical + (req.originalUrl || '/'));
+  res.set?.('Cache-Control', 'no-store');
+  return res.redirect(302, canonical + (req.originalUrl || '/'));
 }

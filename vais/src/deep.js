@@ -1,4 +1,4 @@
-// Agent X intern – ohne neue Knöpfe, automatisch je nach Frage:
+// ApeX intern – ohne neue Knöpfe, automatisch je nach Frage:
 //   DeepSearch: Recherchefragen → mehrere Suchen, mehrere Seiten lesen, Antwort mit nummerierten Quellen [n]
 //   Heavy:      schwere Fragen  → 2–3 starke Modelle antworten parallel, das stärkste fasst zur besten Antwort zusammen
 // Beide fallen still auf den normalen Agent-Ablauf zurück, wenn etwas nicht klappt.
@@ -113,7 +113,7 @@ export async function deepResearch({ question, history = [], personal = {}, sign
     reasoningEffort: 'medium',
     timeoutMs: 120_000,
     messages: [
-      { role: 'system', content: `${personalPrompt(personal)}\n\nYou are Agent X doing DEEP RESEARCH. Write a thorough, well-structured answer based on the numbered sources below: start with a short direct answer (2–3 sentences), then details in sections or bullet points, a table if things are compared, and a short conclusion. Cite every fact directly after the sentence with its number in square brackets, e.g. [1] or [2][4] – only numbers from the list, never invent sources, URLs or facts. Mention dates where relevant. If sources disagree, say so. If something important was not found, say that honestly. Do not add a source list at the end (the app shows the sources).` },
+      { role: 'system', content: `${personalPrompt(personal)}\n\nYou are ApeX by VERTEX doing DEEP RESEARCH. Write a thorough, well-structured answer based on the numbered sources below: start with a short direct answer (2–3 sentences), then details in sections or bullet points, a table if things are compared, and a short conclusion. Cite every fact directly after the sentence with its number in square brackets, e.g. [1] or [2][4] – only numbers from the list, never invent sources, URLs or facts. Mention dates where relevant. If sources disagree, say so. If something important was not found, say that honestly. Do not add a source list at the end (the app shows the sources).` },
       ...history.slice(-6, -1).filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => ({ role: m.role, content: clip(textOf(m), 1500) })),
       { role: 'user', content: `${question}\n\n---\nSources (searched for: ${queries.join(' | ')}):\n\n${blocks.join('\n\n')}` },
     ],
