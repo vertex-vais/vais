@@ -15,8 +15,7 @@ export const isAdmin = (user) => !!user && ADMIN_EMAILS.includes(String(user.ema
 export const isMod = (user) => !!user && user.role === 'mod' && !isAdmin(user);
 export const isStaff = (user) => isAdmin(user) || isMod(user);
 // Testmodus (pro Konto, Spalte users.test_mode, Standard: aus). Nur Admins und Mods können ihn einschalten.
-// Aus: man erlebt ApeX genau wie ein normaler Nutzer (nur ApeX, gleiche Limits) – nur der Admin-Bereich bleibt offen.
-// An: Test-Module (Battle, Direkt …) und Modell-Bestenliste; Admins zusätzlich ohne Tages-/Rate-Limits.
-//     Mods behalten im Testmodus ihr normales (ggf. vom Admin gesetztes) Tageslimit – unbegrenzt nur für Admins.
+// Er bedeutet NUR noch: Admins ohne Tages-/Rate-Limits. Mods behalten ihr normales (ggf. vom Admin gesetztes) Tageslimit.
+// Module gibt es nicht mehr – ApeX ist für alle (auch im Testmodus) die einzige KI.
 export const inTestMode = (user) => isStaff(user) && Number(user?.test_mode) === 1;
 export const isUnlimited = (user) => isAdmin(user) && Number(user?.test_mode) === 1;

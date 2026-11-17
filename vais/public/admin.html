@@ -32,7 +32,7 @@
     <section class="adm-card adm-testmode" id="testmode-card">
       <h2 data-en="Test mode">Testmodus</h2>
       <label class="adm-switch">
-        <span><b data-en="Test mode for my account">Testmodus für mein Konto</b><small id="testmode-hint" data-en="Off: you use ApeX exactly like a normal user – only ApeX, same daily budget. On: test modules (Battle, Direct …) in the chat and no limits for you. Only affects your own account.">Aus: Du nutzt ApeX genau wie ein normaler Nutzer – nur ApeX, gleiches Tagesbudget. An: Test-Module (Battle, Direkt …) im Chat und für dich keine Limits. Gilt nur für dein eigenes Konto.</small></span>
+        <span><b data-en="Test mode for my account">Testmodus für mein Konto</b><small id="testmode-hint" data-en="Only ApeX for everyone – also for you. Off: same daily budget as a normal user. On: no limits for you. Only affects your own account.">Nur ApeX für alle – auch für dich. Aus: gleiches Tagesbudget wie ein normaler Nutzer. An: für dich keine Limits. Gilt nur für dein eigenes Konto.</small></span>
         <input type="checkbox" id="testmode-on" role="switch">
       </label>
       <p class="adm-sub" id="testmode-state"></p>
@@ -216,7 +216,7 @@
       <ul class="adm-users" id="sites"></ul>
     </section>
 
-    <section class="adm-card" data-admin-only>
+    <section class="adm-card" hidden><!-- Bestenliste: alte Battle-Stimmen, ruht (nur ApeX) -->
       <h2 data-en="Leaderboard">Bestenliste</h2>
       <p class="adm-sub" id="board-state"></p>
       <div class="adm-row">

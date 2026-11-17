@@ -13,7 +13,7 @@ let server;
 let log = '';
 
 before(async () => {
-  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com', AUTH_RATE_LIMIT: '1000', SIGNUPS_PER_IP_DAY: '1000', CODES_PER_IP_DAY: '1000' };
+  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com', AUTH_RATE_LIMIT: '1000', SIGNUPS_PER_IP_DAY: '1000', CODES_PER_IP_DAY: '1000', APEX_LEGACY_MODULES: '1' }; // ruhende Alt-Module nur hier im Test (live: nur ApeX, siehe apex-only.test.js)
   for (const k of ['OPENROUTER_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'BREVO_API_KEY', 'SMTP_HOST', 'GOOGLE_CLIENT_ID']) delete env[k];
   server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url).pathname, env, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (d) => { log += d; });
@@ -828,7 +828,7 @@ test('Startseite und Tour: eine KI, keine Modell-Auswahl für normale Nutzer', a
   const css = await (await fetch(`${BASE}/app.css`)).text();
   assert.match(css, /body:not\(\.is-staff\) \.staff-only/);
   const app = await (await fetch(`${BASE}/app.js`)).text();
-  assert.match(app, /el\.modeBtn\.hidden = !isTestUser/); // nur Admins/Mods im Testmodus
+  assert.doesNotMatch(app, /modeBtn|modalityBtn|renderModeMenu|renderPills|mode-pills/); // kein Modus-Umschalter, keine Web/Bild/Code-Schnellwahl – für niemanden
   assert.match(app, /isTestUser = user\.testMode === true/);
   // Deutsch zuerst: Browsersprache entscheidet nicht, nur eine selbst gewählte Sprache
   const boot = await (await fetch(`${BASE}/boot.js`)).text();

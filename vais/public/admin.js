@@ -30,7 +30,6 @@ function tiles(c) {
     [t('Nutzer', 'Users'), c.users, t(`${num(c.new7)} neu in 7 Tagen`, `${num(c.new7)} new in 7 days`)],
     [t('Aktiv heute', 'Active today'), c.active1, t(`${num(c.active7)} in 7 Tagen`, `${num(c.active7)} in 7 days`)],
     [t('Fragen heute', 'Questions today'), c.questions24, t(`${num(c.chats)} Chats insgesamt`, `${num(c.chats)} chats in total`)],
-    [t('Stimmen', 'Votes'), c.votes, t('im Battle', 'in battles')],
     [t('Fehler heute', 'Errors today'), c.errors24, t(`${num(c.fallbacks24)} Ersatz-Modelle`, `${num(c.fallbacks24)} fallbacks`), c.errors24 > 0],
     [t('Gesperrt', 'Blocked'), c.blocked, t(`${num(c.verified)} bestätigt · ${num(c.blocked24 ?? 0)} Anfragen geblockt`, `${num(c.verified)} verified · ${num(c.blocked24 ?? 0)} requests blocked`)],
   ];
@@ -308,14 +307,14 @@ async function load() {
   }
 }
 
-// Testmodus (nur für das eigene Konto): aus = ApeX wie ein normaler Nutzer, an = Test-Module (+ für Admins keine Limits)
+// Testmodus (nur für das eigene Konto): bedeutet nur noch „keine Limits“ für Admins. ApeX bleibt für alle die einzige KI.
 function paintTestMode(d) {
   $('#testmode-on').checked = !!d.on;
   $('#testmode-card').classList.toggle('on', !!d.on);
-  if (role !== 'admin') $('#testmode-hint').textContent = t('Aus: Du nutzt ApeX genau wie ein normaler Nutzer. An: Test-Module (Battle, Direkt …) im Chat. Dein Tageslimit bleibt gleich. Gilt nur für dein eigenes Konto.', 'Off: you use ApeX exactly like a normal user. On: test modules (Battle, Direct …) in the chat. Your daily limit stays the same. Only affects your own account.');
+  if (role !== 'admin') $('#testmode-hint').textContent = t('Du nutzt immer nur ApeX, wie jeder Nutzer. Für Mods ändert der Testmodus nichts an den Limits. Gilt nur für dein eigenes Konto.', 'You always use only ApeX, like every user. For mods, test mode does not change the limits. Only affects your own account.');
   $('#testmode-state').textContent = d.on
-    ? (d.unlimited ? t('An: Test-Module und unbegrenzte Limits für dich.', 'On: test modules and unlimited limits for you.') : t('An: Test-Module für dich.', 'On: test modules for you.'))
-    : t('Aus: Du siehst ApeX wie ein normaler Nutzer.', 'Off: you see ApeX like a normal user.');
+    ? (d.unlimited ? t('An: keine Limits für dich (nur ApeX, wie für alle).', 'On: no limits for you (only ApeX, like everyone).') : t('An: deine Limits bleiben gleich (nur ApeX, wie für alle).', 'On: your limits stay the same (only ApeX, like everyone).'))
+    : t('Aus: Du hast dieselben Limits wie ein normaler Nutzer.', 'Off: you have the same limits as a normal user.');
   try { localStorage.setItem('apex-test-mode', d.on ? '1' : '0'); } catch { /* egal */ }
 }
 $('#testmode-on').addEventListener('change', async (e) => {
