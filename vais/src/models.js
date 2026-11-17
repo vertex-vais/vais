@@ -519,7 +519,7 @@ export function modelKey(id) {
   return id.replace(/^openrouter:/, '').replace(/#search$/, '');
 }
 export async function describeModel(id) {
-  if (id === 'agent') return { name: 'ApeX', maker: 'ApeX', icon: 'vais' };
+  if (id === 'agent') return { name: 'Agent X', maker: 'ApeX', icon: 'vais' };
   if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'ApeX', icon: 'vais' };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
@@ -528,7 +528,7 @@ export async function describeModel(id) {
 }
 
 export async function displayName(id) {
-  if (id === 'agent') return 'ApeX';
+  if (id === 'agent') return 'Agent X';
   if (id === 'auto') return t('Automatisch', 'Automatic');
   return (await findModel(id))?.name ?? id.split(/[:/]/).pop().replace(/:free$/, '');
 }
@@ -722,7 +722,7 @@ export const RANKING = {
   vision: [M.gemma31, M.nemoVL, M.flash, M.orGemma, M.inkling, M.mistral, M.orFree],
   // Titel, Vorschläge, Zusammenfassungen
   helper: [M.gptoss20, M.gemma26, M.flashLite, M.gemma31, M.qwen, M.gptoss120, M.orFree],
-  // ApeX (braucht Werkzeuge) und Ersatz bei vollen/zu kleinen Limits
+  // Agent X (braucht Werkzeuge) und Ersatz bei vollen/zu kleinen Limits
   agent: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.gptoss20, M.flash],
   agentBackup: [M.qwen, M.gemma31, M.inkling, M.nemoUltra, M.gptoss20, M.flash, M.gptoss120],
   translate: [M.gptoss120, M.gemma31, M.qwen, M.inkling, M.gptoss20, M.flash, M.orFree],
@@ -974,7 +974,7 @@ function demoImage(name, text) {
   return new Promise((resolve) => setTimeout(() => resolve(`data:image/svg+xml;base64,${Buffer.from(svgText).toString('base64')}`), 900));
 }
 
-// Eine Antwort ohne Streaming, optional mit Werkzeugen (für ApeX)
+// Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
 export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000 }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');

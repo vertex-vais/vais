@@ -776,7 +776,7 @@ body { overflow: hidden; }
 .preview-panel .modal-head { margin-bottom: 12px; }
 #preview-frame { flex: 1; width: 100%; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 
-/* ── ApeX ───────────────────────────────────────────── */
+/* ── Agent X ───────────────────────────────────────────── */
 .agent-steps {
   list-style: none;
   margin: 0 0 14px;
@@ -1547,7 +1547,7 @@ a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
 .usage-costs small { width: 100%; font-size: 12px; }
 .usage-costs b { color: var(--text); font-weight: 600; }
 
-/* ── ApeX: Emoji-Reaktionen, Notfall-Modell, Eintrag in der Liste ─ */
+/* ── Agent X: Emoji-Reaktionen, Notfall-Modell, Eintrag in der Liste ─ */
 .turn-user .reactions { display: flex; gap: 4px; margin-top: -14px; margin-right: 10px; position: relative; z-index: 1; }
 .reaction {
   display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; box-sizing: border-box;
@@ -1733,7 +1733,7 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .fb-chip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s; }
 .fb-chip[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
 
-/* ── Plan von ApeX ─────────────────────────────────────────────── */
+/* ── Plan von Agent X ─────────────────────────────────────────────── */
 .plan-card { margin: 10px 0; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .plan-head { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .plan-card ol { margin: 0 0 12px; padding-left: 22px; display: grid; gap: 6px; }
@@ -1742,7 +1742,7 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .plan-acts button { padding: 9px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
 .plan-acts .plan-go { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
 .plan-acts button:active { transform: scale(.97); }
-/* Rückfragen von ApeX */
+/* Rückfragen von Agent X */
 .q-card { margin: 10px 0; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); display: grid; gap: 14px; }
 .q-card .plan-head { margin: 0; }
 .q-head { display: flex; justify-content: space-between; align-items: baseline; }
