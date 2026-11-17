@@ -15,6 +15,7 @@ import { completeBest, generateImage, listModels, rankModels } from './models.js
 import { searchWeb } from './search.js';
 import { basePrompt } from './prompt.js';
 import { checkText } from './safety.js';
+import { publicOrigin } from './canonical.js';
 
 await run(`CREATE TABLE IF NOT EXISTS telegram_users (
   tg_id INTEGER PRIMARY KEY,
@@ -67,7 +68,7 @@ export function telegramConfig(env = process.env) {
     secret,
     limit: Number.isFinite(limit) && limit >= 0 ? limit : 50,
     allowed: allowed.length ? new Set(allowed) : null,
-    publicUrl: String(env.RENDER_EXTERNAL_URL || env.APP_URL || '').replace(/\/$/, ''),
+    publicUrl: publicOrigin(undefined, env),
   };
 }
 

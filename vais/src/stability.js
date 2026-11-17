@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { logEvent } from './db.js';
 import { wrap, currentUser } from './auth.js';
 import { listModels, complete, lastOkOf, markBroken, healthCooldown } from './models.js';
+import { publicOrigin } from './canonical.js';
 
 // ── Speicher ────────────────────────────────────────────────────────
 // Render (kostenlos) hat 512 MB. Zwischenspeicher melden sich hier an und werden geleert, wenn es eng wird.
@@ -97,7 +98,7 @@ export const runHealthCheck = checkModels;
 // ── Keep-Alive: Render (kostenlos) schläft nach ~15 Minuten ohne Besucher ein ─────────
 // Alle 10 Minuten ruft sich der Server über seine öffentliche Adresse selbst auf, damit er wach bleibt.
 // Abschalten mit KEEP_ALIVE=off. (Render setzt RENDER_EXTERNAL_URL automatisch.)
-const PUBLIC_URL = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+const PUBLIC_URL = publicOrigin();
 export const keepAlive = { on: false, last: null, ok: null };
 globalThis.__vaisKeepAlive = keepAlive;
 if (PUBLIC_URL && process.env.KEEP_ALIVE !== 'off' && process.env.NODE_ENV !== 'test') {

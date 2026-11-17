@@ -15,6 +15,7 @@ const { statusPage } = await import('./src/status.js');
 const { telegramBot } = await import('./src/telegram.js');
 const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isStaff } = await import('./src/config.js');
+const { canonicalRedirect, publicOrigin } = await import('./src/canonical.js');
 const { readFile } = await import('node:fs/promises');
 
 // Abstürze vermeiden: unerwartete Fehler nur protokollieren
@@ -24,6 +25,7 @@ process.on('uncaughtException', (err) => console.error('Unerwarteter Fehler:', e
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+app.use(canonicalRedirect);
 
 // Schneller Gesundheits-Check (für Render und die „ApeX wacht auf“-Seite)
 app.get('/healthz', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true }));
@@ -102,7 +104,7 @@ const noCache = (res) => res.set('Cache-Control', 'no-cache');
 const pageCache = new Map();
 async function sendPage(req, res, name) {
   if (!pageCache.has(name)) pageCache.set(name, await readFile(page(name), 'utf8'));
-  const origin = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const origin = publicOrigin(req);
   res.type('html').send(pageCache.get(name).replaceAll('__ORIGIN__', origin));
 }
 app.get('/', async (req, res) => {
