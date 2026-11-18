@@ -7,6 +7,7 @@
 // Änderungen später: Nur die betroffenen Abschnitte werden neu geschrieben (Markierungen <!--vx:ID--> im HTML).
 import vm from 'node:vm';
 import { complete, listModels, rankModels } from './models.js';
+import { mobileProblems } from './sitecheck.js';
 
 const sleep = (ms, signal) => new Promise((ok, no) => {
   const tm = setTimeout(ok, ms);
@@ -112,11 +113,11 @@ const cssColor = (v, fb) => (/^#[0-9a-f]{3,8}$/i.test(String(v ?? '').trim()) ? 
 const fontName = (v, fb) => (/^[\w \-]{2,40}$/.test(String(v ?? '')) ? String(v).trim() : fb);
 
 // ── Schritt 1: Architekt ─────────────────────────────────────────────
-async function architect(brief, kind, { signal }) {
+async function architect(brief, kind, { signal, rules = '' }) {
   const sys = `Du bist Art-Director und Informationsarchitekt einer Top-Webagentur. Plane eine ${kind === 'website' ? 'Webseite' : kind === 'game' ? 'Browser-Spiel-Seite' : 'Web-App'} anhand des Auftrags. Antworte NUR mit JSON in einem \`\`\`json-Block:
 {"title":"…","lang":"de","style":"2–3 Sätze zur Gestaltung (Stimmung, Formen, Besonderheiten)","palette":{"bg":"#…","surface":"#…","surface2":"#…","text":"#…","muted":"#…","primary":"#…","primaryContrast":"#…","accent":"#…","border":"#…"},"fonts":{"heading":"Google-Font-Name","body":"Google-Font-Name"},"radius":"z. B. 14px","sections":[{"id":"kurz-ohne-leerzeichen","goal":"Zweck","content":"ALLE Texte, Fakten, Listen und Ideen für diesen Abschnitt – ausführlich, konkret, nur echte Angaben aus dem Auftrag","interaction":"was man dort tun/klicken kann","size":"normal|large"}]}
 Regeln: ${kind === 'website' ? '6–10 Abschnitte, erster Abschnitt id "nav" (Kopfzeile mit Logo/Name und Menü zu den Abschnitten), zweiter ein starker Hero, letzter id "footer".' : '3–6 Abschnitte: "nav" (Kopfzeile), der Hauptteil (die App bzw. das Spiel, size "large", mit allen Funktionen/Regeln/Steuerung ausführlich beschrieben), dazu sinnvolle Bereiche wie Anleitung oder Einstellungen, zuletzt "footer".'}
-Kontrastreiche, harmonische Farben passend zum Thema (nicht immer lila/blau). Schriften von Google Fonts. Inhalte nur aus dem Auftrag – nichts erfinden (keine Bewertungen, Preise, Kontaktdaten, Personen, Zahlen).`;
+Kontrastreiche, harmonische Farben passend zum Thema (nicht immer lila/blau). Schriften von Google Fonts. Inhalte nur aus dem Auftrag – nichts erfinden (keine Bewertungen, Preise, Kontaktdaten, Personen, Zahlen).${rules ? `\n\nZUSATZREGELN FÜR DIESEN AUFTRAG (haben Vorrang):\n${rules}` : ''}`;
   const { text } = await ask([{ role: 'system', content: sys }, { role: 'user', content: `Auftrag:\n${brief}` }], { maxTokens: 3500, signal, effort: 'medium' });
   const raw = parseJson(text);
   const p = raw.palette ?? {};
@@ -173,7 +174,7 @@ Antworte mit genau diesen Blöcken:
 ${isNav ? 'Kopfzeile: sticky, leicht durchscheinend mit backdrop-filter, Logo/Name links, Menü-Links zu den Abschnitten (#id), auf dem Handy ein Menü-Knopf mit data-nav-toggle und das Menü mit data-nav (Klasse .open zeigt es).' : ''}${isFooter ? 'Fußzeile: Name, kurze Beschreibung, Links zu den Abschnitten, © <span data-year></span>. Keine erfundenen Kontaktdaten oder Social-Media-Konten.' : ''}
 ${s.size === 'large' ? 'Das ist der Hauptteil (App/Spiel): vollständig funktionsfähig, durchdacht, mit allen beschriebenen Funktionen, Zuständen, Punktestand/Speichern (localStorage) wo sinnvoll, Tastatur- UND Touch-Steuerung.' : 'Mache den Abschnitt reichhaltig: mehrere durchdachte Elemente, Inline-SVG-Icons, .reveal auf Elementen (mit data-delay 0–400 für Staffelung).'}
 ${CONTRACT}
-${QUALITY}`;
+${QUALITY}${spec.rules ? `\n\nZUSATZREGELN FÜR DIESEN AUFTRAG (haben Vorrang):\n${spec.rules}` : ''}`;
   const user = `${briefText(spec)}\nStil-Details: ${spec.style}\n\nDEIN ABSCHNITT: id "${s.id}"\nZweck: ${s.goal}\nInhalt: ${s.content}\nInteraktion: ${s.interaction || '–'}${extra ? `\n\n${extra}` : ''}`;
   return [{ role: 'system', content: sys }, { role: 'user', content: user }];
 }
@@ -182,11 +183,12 @@ function splitPart(text) {
 }
 async function buildSection(spec, s, { signal, extra } = {}) {
   const maxTokens = s.size === 'large' ? 7000 : 4500;
-  let r = await ask(sectionPrompt(spec, s, extra), { maxTokens, signal, effort: 'low' });
+  const effort = spec.effort ?? 'low';
+  let r = await ask(sectionPrompt(spec, s, extra), { maxTokens, signal, effort });
   let part = splitPart(r.text);
   if (r.cut || !part.html || !/<\/(section|header|footer|div|main)>\s*$/i.test(part.html)) {
     // abgeschnitten: noch einmal, etwas kompakter
-    r = await ask(sectionPrompt(spec, s, `${extra ?? ''}\nWICHTIG: Deine letzte Fassung war zu lang und wurde abgeschnitten. Schreibe kompakter (weniger Wiederholungen, kürzere SVGs), aber vollständig.`), { maxTokens, signal, effort: 'low' });
+    r = await ask(sectionPrompt(spec, s, `${extra ?? ''}\nWICHTIG: Deine letzte Fassung war zu lang und wurde abgeschnitten. Schreibe kompakter (weniger Wiederholungen, kürzere SVGs), aber vollständig.`), { maxTokens, signal, effort });
     const again = splitPart(r.text);
     if (again.html) part = again;
   }
@@ -219,6 +221,8 @@ function checkPart(part, validate, allowed = '') {
   if (!/^OK/.test(v)) problems.push(...v.split('\n').slice(1).map((l) => l.replace(/^- /, '')));
   if (part.js) { try { new vm.Script(part.js); } catch (err) { problems.push(`JavaScript-Fehler: ${err.message}`); } }
   for (const f of fakeCheck(part.html + part.js, allowed)) problems.push(`Enthält ${f} – ersetze das durch echte Inhalte aus dem Auftrag oder lass es weg.`);
+  // Handy: feste Breiten, nicht umbrechende Menüs, Navigation ohne Menü-Knopf
+  problems.push(...mobileProblems(`<meta name="viewport" content="width=device-width"><style>${part.css}</style>${part.html}`).filter((p) => !/@media-Breakpoint|Tabellen ohne/.test(p)));
   return problems.filter((p) => !/doctype|<title>|viewport|charset/i.test(p));
 }
 
@@ -230,7 +234,7 @@ function fontLink(spec) {
 }
 export function assemble(spec, base, parts) {
   const order = spec.sections.map((s) => s.id).filter((id) => parts[id]);
-  const meta = { title: spec.title, lang: spec.lang, kind: spec.kind, style: spec.style, palette: spec.palette, fonts: spec.fonts, radius: spec.radius, sections: spec.sections.map(({ id, goal }) => ({ id, goal })) };
+  const meta = { title: spec.title, lang: spec.lang, kind: spec.kind, style: spec.style, palette: spec.palette, fonts: spec.fonts, radius: spec.radius, sections: spec.sections.map(({ id, goal }) => ({ id, goal })), ...(spec.rules ? { rules: spec.rules } : {}) };
   return `<!doctype html>
 <html lang="${esc(spec.lang)}">
 <head>
@@ -301,12 +305,14 @@ async function repair(spec, parts, ids, { signal, onStep, validate }) {
 const lineCount = (s) => s.split('\n').length;
 
 // ── Öffentlich: neue Seite bauen ─────────────────────────────────────
-export async function buildWebsite({ brief, kind = 'website', signal, onStep = () => {}, validate }) {
+export async function buildWebsite({ brief, kind = 'website', signal, onStep = () => {}, validate, rules = '', effort = 'low' }) {
   const k = ['website', 'app', 'game'].includes(kind) ? kind : 'website';
   const text = String(brief ?? '').slice(0, 9000);
   onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
-  const spec = await architect(text, k, { signal });
+  const spec = await architect(text, k, { signal, rules });
   spec.brief = text;
+  spec.rules = String(rules ?? '').slice(0, 2000);
+  spec.effort = ['low', 'medium', 'high'].includes(effort) ? effort : 'low';
   onStep({ kind: 'draft', text: `${spec.sections.length} Abschnitte: ${spec.sections.map((s) => s.id).join(', ')}` });
   // Basis und Abschnitte gleichzeitig (die Abschnitte kennen den Design-Vertrag); höchstens 2 Anfragen auf einmal
   const basePromise = (async () => { onStep({ kind: 'section', text: 'Design-System' }); return buildBase(spec, { signal }); })().catch((err) => { if (signal?.aborted) throw err; return null; });
@@ -382,10 +388,12 @@ function summary(spec, html, validate) {
 }
 
 // ── Öffentlich: bestehende Seite gezielt ändern ──────────────────────
-export async function editWebsite({ html, change, signal, onStep = () => {}, validate }) {
+export async function editWebsite({ html, change, signal, onStep = () => {}, validate, rules = '', effort = null }) {
   const page = disassemble(String(html ?? ''));
   if (!page) return editWhole({ html, change, signal, onStep, validate });
   const { spec, base, parts } = page;
+  if (rules) spec.rules = String(rules).slice(0, 2000);
+  if (effort) spec.effort = effort;
   spec.brief = `${change}\n${html}`; // was schon auf der Seite stand oder der Nutzer angibt, gilt als echt
   onStep({ kind: 'draft', text: 'Welche Teile sich ändern' });
   const outline = spec.sections.map((s) => {

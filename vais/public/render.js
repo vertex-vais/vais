@@ -129,70 +129,17 @@ export function enhance(root) {
     const pre = code.parentElement;
     if (pre.parentElement?.classList.contains('codeblock')) return;
     const lang = (code.className.match(/language-([\w+#.-]+)/) || [])[1] || '';
-    if (lang === 'plan') {
-      // Plan von ApeX: Schritte als Karte, darunter „Los geht’s“ / „Ändern“
-      const steps = code.textContent.split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-*•])\s*/, '').trim()).filter(Boolean).slice(0, 12);
-      const card = document.createElement('div');
-      card.className = 'plan-card';
-      const head = document.createElement('p');
-      head.className = 'plan-head';
-      head.textContent = t('Plan', 'Plan');
-      const ol = document.createElement('ol');
-      for (const step of steps) ol.append(Object.assign(document.createElement('li'), { textContent: step }));
-      const acts = document.createElement('div');
-      acts.className = 'plan-acts';
-      acts.innerHTML = `<button type="button" class="plan-go" data-plan="go">${t('✓ Los geht’s', '✓ Go ahead')}</button><button type="button" class="plan-edit" data-plan="edit">${t('✏️ Ändern', '✏️ Change')}</button>`;
-      card.append(head, ol, acts);
-      pre.replaceWith(card);
-      return;
-    }
-    if (lang === 'questions') {
-      // Rückfragen von ApeX: eine Frage nach der anderen, Antworten zum Antippen + eigenes Feld
-      const src = code.textContent;
-      const qs = src.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).map((line) => {
+    if (lang === 'plan' || lang === 'questions') {
+      // Alte Plan-/Rückfragen-Blöcke: nur noch als normaler Text (keine Kästen oder Knöpfe mehr)
+      const items = code.textContent.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 12).map((line) => {
         const [q, ...opts] = line.split('|').map((x) => x.trim());
-        return { q: q.replace(/^\s*(\d+[.)]|[-*•])\s*/, ''), opts: opts.filter((o) => o && !/^[_….]+$/.test(o)).slice(0, 6) };
-      }).filter((x) => x.q);
-      const key = src.trim();
-      const st = QSTATE.get(key) ?? { step: 0, picked: {}, own: {} };
-      QSTATE.set(key, st);
-      const card = document.createElement('div');
-      card.className = 'q-card';
-      card.dataset.qkey = key;
-      const head = document.createElement('div');
-      head.className = 'q-head';
-      head.innerHTML = `<span class="plan-head">${t('Kurz ein paar Fragen', 'A few quick questions')}</span><span class="q-count"></span>`;
-      const bar = document.createElement('div');
-      bar.className = 'q-bar';
-      bar.innerHTML = '<i></i>';
-      card.append(head, bar);
-      qs.forEach((item, i) => {
-        const box = document.createElement('div');
-        box.className = 'q-item';
-        box.dataset.q = item.q;
-        box.dataset.i = String(i);
-        box.append(Object.assign(document.createElement('p'), { className: 'q-text', textContent: item.q }));
-        if (item.opts.length) {
-          const chips = document.createElement('div');
-          chips.className = 'q-chips';
-          for (const o of item.opts) {
-            const chip = Object.assign(document.createElement('button'), { type: 'button', className: 'q-chip', textContent: o });
-            chip.setAttribute('aria-pressed', String((st.picked[i] ?? []).includes(o)));
-            chips.append(chip);
-          }
-          box.append(chips);
-        }
-        const input = Object.assign(document.createElement('input'), { className: 'q-input', type: 'text', maxLength: 300, value: st.own[i] ?? '', placeholder: item.opts.length ? t('Oder eigene Antwort …', 'Or your own answer …') : t('Deine Antwort …', 'Your answer …') });
-        input.setAttribute('aria-label', item.q);
-        box.append(input);
-        card.append(box);
+        const text = q.replace(/^\s*(\d+[.)]|[-*•])\s*/, '');
+        const o = opts.filter((x) => x && !/^[_….]+$/.test(x)).slice(0, 4);
+        return o.length ? `${text} (${t('z. B.', 'e.g.')} ${o.join(', ')})` : text;
       });
-      const acts = document.createElement('div');
-      acts.className = 'q-acts';
-      acts.innerHTML = `<button type="button" class="q-back" data-q-back>${t('Zurück', 'Back')}</button><button type="button" class="q-skip" data-q-skip>${t('Mach einfach', 'Just do it')}</button><button type="button" class="q-next" data-q-next></button>`;
-      card.append(acts);
-      showQuestion(card, Math.min(st.step, qs.length - 1));
-      pre.replaceWith(card);
+      const listEl = document.createElement(lang === 'plan' ? 'ol' : 'ul');
+      for (const item of items) listEl.append(Object.assign(document.createElement('li'), { textContent: item }));
+      pre.replaceWith(listEl);
       return;
     }
     if (lang === 'chart') {

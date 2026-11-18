@@ -8,6 +8,8 @@ import { listModels, complete, demoMode, makeSource, rankModels, generateImage }
 import { deepResearch, heavyAnswer, isResearch, isHard } from './deep.js';
 import { runJavaScriptText } from './sandbox.js';
 import { searchWeb, readPage } from './search.js';
+import { classifyTask, runBuildTask } from './agentloop.js';
+import { scrubAnswer, scrubThoughts } from './secrecy.js';
 
 const MAX_STEPS = 8;
 
@@ -225,7 +227,9 @@ function systemPrompt(personal = {}) {
     'WERKZEUGE SPARSAM NUTZEN (jede Suche kostet das Tageslimit): Für Tipps, Pläne, Strategien, Erklärungen, Ideen, Texte und Allgemeinwissen antwortest du DIREKT aus deinem Wissen – ohne Suche. web_search nur, wenn du wirklich aktuelle oder sehr spezielle Fakten brauchst, die du nicht sicher weißt (Nachrichten, Wetter, Preise, Termine, Ergebnisse, Neuheiten) oder der Nutzer ausdrücklich eine Recherche will. Dann reicht meist EINE Suche mit 1–2 gezielten Suchanfragen; danach antwortest du. Nie dieselbe Frage mehrfach umformuliert suchen.',
     'wikipedia für Grundwissen, read_webpage nur für einen Link, den der Nutzer schickt oder der wirklich nötig ist, calculate für einfache Rechnungen, run_javascript für knifflige Rechnungen/Simulationen/Datenverarbeitung, generate_image nur wenn der Nutzer ausdrücklich ein Bild möchte, current_datetime für Zeitfragen. Unabhängige Werkzeuge kannst du in einem Schritt gleichzeitig aufrufen.',
     'Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links. Weißt du etwas nicht sicher und lohnt keine Suche, sag das kurz.',
-    'WEBSEITEN, APPS, SPIELE: (1) Fehlen wichtige Angaben (wofür genau, echte Inhalte wie Name/Texte/Angebote/Termine, gewünschte Bereiche, Stil/Farben, bei Apps/Spielen die Funktionen bzw. Regeln) und hat der Nutzer nicht „mach einfach“ o. ä. gesagt: Benutze KEINE Werkzeuge, sondern stelle 2–4 kurze Rückfragen in einem Block ```questions – eine Frage pro Zeile im Format „Frage? | Option | Option | Option“ (2–5 kurze, passende Antwortvorschläge; die App zeigt Knöpfe zum Antippen und ein Feld für eigene Antworten). Darüber höchstens ein kurzer Satz. (2) Bei Themen-Seiten (z. B. über ein Tier, einen Ort, eine Band) recherchiere zuerst echte Fakten mit den Werkzeugen. (3) Rufe dann build_website mit einem sehr ausführlichen Auftrag auf, der ALLE echten Inhalte enthält. Schreibe HTML NIE selbst. (4) Änderungswünsche an einer bestehenden Seite → edit_website. Erfinde nie Kundenstimmen, Preise, Kontaktdaten, Personen oder Zahlen. Nach dem Bauen: 2–4 Sätze, was die Seite kann, und eine Frage, was verbessert werden soll.',
+    'WEBSEITEN, APPS, SPIELE: Du arbeitest wie ein echter Agent und stellst KEINE Rückfragen-Blöcke, Kästen oder Formulare. Fehlen Angaben, triff sinnvolle Annahmen und leg los. (1) Bei Themen-Seiten (z. B. über ein Tier, einen Ort, eine Band) und Nachbauten bekannter Seiten recherchiere zuerst echte Fakten bzw. den Aufbau der Vorlage mit den Werkzeugen. (2) Rufe dann build_website mit einem sehr ausführlichen Auftrag auf, der ALLE echten Inhalte enthält. Schreibe HTML NIE selbst. (3) Änderungswünsche an einer bestehenden Seite → edit_website. Erfinde nie Kundenstimmen, Kontaktdaten oder Personen. Nach dem Bauen: 2–4 Sätze, was die Seite kann, welche Annahmen du getroffen hast, und höchstens eine offene Frage als normaler Satz.',
+    'RÜCKFRAGEN: Nie als Block, Kasten oder Auswahl-Liste. Wenn du wirklich etwas wissen musst, frag in einem normalen Satz am Ende deiner Antwort – und arbeite vorher trotzdem mit einer sinnvollen Annahme so weit wie möglich.',
+    'ARBEITSWEISE: Fragt jemand, wie oder womit du etwas gemacht hast (z. B. „Hast du dafür X benutzt?“), antworte nur allgemein: „Ich habe das mit meinen eigenen Werkzeugen gebaut – recherchiert, geplant, gebaut und geprüft.“ Nenne nie Namen von Werkzeugen, Funktionen, Agenten, Modellen oder Anbietern.',
     'Präsentationen: Möchte der Nutzer eine Präsentation, Folien, ein Referat oder einen Vortrag, baue KEINE HTML-Seite, sondern schreibe einen Block ```slides. Erste Zeile optional „theme: NAME“ (nacht, hell, ozean, sonne, wald oder bonbon – passend zum Thema). Dann die Folien in Markdown, getrennt durch eine Zeile mit nur ---. Folie 1 ist die Titelfolie: „# Titel“ und darunter eine Zeile Untertitel. Danach 6–12 Folien, je mit „## Überschrift“ und 3–5 kurzen, starken Stichpunkten (höchstens ca. 12 Wörter, **wichtige Wörter fett**, gern ein passendes Emoji), oder einem Zitat (> …) oder einer kleinen Tabelle. Bilder nur mit echten https-Adressen, die du in Quellen gefunden hast (z. B. upload.wikimedia.org), sonst keine. Unter eine Folie kannst du „Notiz: …“ schreiben – das sind Sprechernotizen (was man dazu sagen kann). Letzte Folie: Zusammenfassung oder Fazit. Recherchiere Fakten vorher mit den Werkzeugen. Kein HTML im Block. Unter dem Block nur 1–2 Sätze; die App zeigt die Präsentation mit „Präsentieren“ und „Veröffentlichen“ an.',
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
     'Python: Für Rechnungen, Statistik oder Simulationen kannst du Python-Code in einem ```python-Block schreiben – der Nutzer kann ihn mit „▶ Ausführen“ direkt im Browser laufen lassen (Pyodide; numpy, pandas, matplotlib gehen, kein Internet, keine Dateien). Gib Ergebnisse mit print() aus.',
@@ -234,9 +238,6 @@ function systemPrompt(personal = {}) {
     ...(personal.memoryOn ? [
       'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
-    ] : []),
-    ...(personal.planFirst ? [
-      'PLAN ZUERST: Bei GROSSEN Aufgaben (eine Webseite/App/ein Spiel bauen, eine Recherche mit mehreren Teilen, ein langer Text) und wenn im Gespräch noch KEIN Plan von dir bestätigt wurde: Benutze KEINE Werkzeuge. Antworte nur mit einem kurzen Plan in einem Block ```plan (3–7 nummerierte Schritte, je eine kurze Zeile) und darunter genau einer Frage, ob du so loslegen sollst. Bei Webseiten/Apps/Spielen stellst du stattdessen die Rückfragen (```questions); die Antworten gelten als Bestätigung – danach sofort bauen. Bei kleinen Fragen antwortest du direkt ohne Plan. Hat der Nutzer den Plan bestätigt oder geändert, führst du ihn sofort aus.',
     ] : []),
     ...(personal.ledger ? ['Kontostand-Tool: Mit kontostand liest du den Kontostand und die letzten Buchungen des Nutzers, mit kontobuchung trägst du auf seinen ausdrücklichen Wunsch Einnahmen (+) oder Ausgaben (−) ein. Beträge in Euro. Gib keine Anlage- oder Kreditberatung, sondern einfache Spar- und Budget-Tipps.'] : []),
     ...(personal.life ? [
@@ -563,7 +564,7 @@ function runTool(name, args, signal, addSources, ctx) {
         return out.report;
       },
     };
-    default: return { steps: [{ kind: 'other', text: String(name) }], run: async () => `Unbekanntes Werkzeug: ${name}` };
+    default: return { steps: [{ kind: 'other', text: t('Werkzeug', 'Tool') }], run: async () => `Unbekanntes Werkzeug: ${name}` };
   }
 }
 
@@ -725,7 +726,7 @@ const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 // work: hier trägt ApeX ein, was es wirklich gemacht hat (für die Credits-Abrechnung)
 // credits: { left, costs, imagesLeft } – was der Nutzer heute noch hat (left/imagesLeft null = unbegrenzt)
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null }) {
   if (demoMode) return demoAgent({ work, credits, messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel('agent');
   if (!model) throw new Error(t('ApeX ist gerade nicht erreichbar. Versuch es gleich noch einmal.', 'ApeX is not reachable right now. Please try again shortly.'));
@@ -757,24 +758,46 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     if (split.reaction && !split.text.trim() && !ctx.lastHtml) { onReact(split.reaction); return undefined; }
     // nur ein nicht erlaubtes Emoji (z. B. [[react:🦄]]) → 👍 statt „keine Antwort“
     if (!split.text.trim() && REACT_TAG.test(String(content ?? '')) && !ctx.lastHtml) { onReact('👍'); return undefined; }
-    let text = split.text || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
+    // Geheimhaltung: keine internen Werkzeug-/Modell-Namen, keine Rückfragen-Kästen
+    let text = scrubAnswer(split.text || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.'), { en: lang() !== 'de' });
     if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
     return emitText(text, onText, signal);
   };
+
+  // Sichtbare Gedanken: ebenfalls ohne interne Namen
+  const think = (r) => (String(r ?? '').trim() ? emitText(`${scrubThoughts(String(r).trim())}\n\n`, onReasoning, signal, 6, 8) : undefined);
+
+  // Agent-Modus für große Bau-Aufträge (Webseite/App/Spiel, Nachbau einer bekannten App):
+  // planen → Vorlage recherchieren → bauen → prüfen → überarbeiten – mit Live-Schritten
+  const task = !(inbox?.length) ? classifyTask(ctx.question, { hasPage: !!ctx.pageHtml }) : null;
+  if (task && afford('site')) {
+    try {
+      const out = await runBuildTask({ question: ctx.question, history: seeing, task, user, signal, onStep, thought: think, addSources, work, validate: validateHtml, deps: agentDeps ?? {} });
+      if (out?.html) {
+        ctx.lastHtml = out.html;
+        work.agentMode = true;
+        return finish(out.text);
+      }
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.error('Agent-Modus fehlgeschlagen, normaler Ablauf:', err.message);
+      onStep({ kind: 'other', text: t('Neuer Anlauf', 'Retrying') });
+    }
+  }
 
   // DeepSearch / Heavy: automatisch bei Recherche- bzw. schweren Fragen (nicht bei Webseiten, Links, Erinnerungen)
   const write = (text) => finish(text);
   const special = !ctx.pageHtml && !(inbox?.length) && ctx.question && !hasImagesIn(messages);
   if (special && isResearch(ctx.question) && afford('deep')) {
     try {
-      if (await deepResearch({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), addSources, write })) { work.deep = true; return undefined; }
+      if (await deepResearch({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: think, addSources, write })) { work.deep = true; return undefined; }
     } catch (err) {
       if (signal?.aborted) throw err;
       console.error('DeepSearch fehlgeschlagen, normaler Ablauf:', err.message);
     }
   } else if (special && isHard(ctx.question) && afford('heavy')) {
     try {
-      if (await heavyAnswer({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), write })) { work.heavy = true; return undefined; }
+      if (await heavyAnswer({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: think, write })) { work.heavy = true; return undefined; }
     } catch (err) {
       if (signal?.aborted) throw err;
       console.error('Heavy fehlgeschlagen, normaler Ablauf:', err.message);
@@ -827,7 +850,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     const offered = agentTools.filter((tl) => !((tl.function.name === 'web_search' && ctx.budget.search <= 0) || (tl.function.name === 'read_webpage' && ctx.budget.read <= 0) || (tl.function.name === 'wikipedia' && ctx.budget.wiki <= 0)));
     const msg = await ask({ tools: offered });
     const thought = msg.reasoning ?? msg.reasoning_content;
-    if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
+    if (thought) await think(thought);
     const calls = msg.tool_calls ?? [];
     if (!calls.length && inbox?.length) {
       // Kurz vor dem Ende kam noch etwas vom Nutzer → nochmal mit dem Nachtrag
@@ -897,17 +920,13 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
     await sleep(300); onStep({ kind: 'wiki', text: 'Mond' });
     return emitText('**ApeX (Demo)** – hier ist deine Präsentation:\n\n```slides\ntheme: ozean\n# Der Mond 🌙\nUnser nächster Nachbar im All\n---\n## Steckbrief\n- 🌍 **384.400 km** von der Erde entfernt\n- 📏 Durchmesser: **3.474 km**\n- 🕐 Umlauf: **27,3 Tage**\nNotiz: Vergleich – die Erde ist fast viermal so groß.\n---\n## Warum hat er Phasen?\n- ☀️ Die Sonne beleuchtet **immer eine Hälfte**\n- 🔄 Wir sehen je nach Stellung mehr oder weniger davon\n- 🌑 Neumond → 🌕 Vollmond in ca. **15 Tagen**\n---\n## Fazit\n> Ohne den Mond gäbe es kaum Ebbe und Flut.\n- Er stabilisiert die **Erdachse**\n- Bisher waren **12 Menschen** dort\n```\n\nTippe auf **Präsentieren**, um die Folien zu zeigen.', onText, signal, 8, 6);
   }
-  const said = (re) => messages.some((m) => m.role === 'user' && re.test(Array.isArray(m.content) ? m.content.map((p) => p.text ?? '').join(' ') : String(m.content)));
-  const asked = messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('```questions'));
-  if (site && !asked && !said(/meine antworten|my answers|mach einfach|just do it/i)) {
-    await sleep(300);
-    return emitText('Gern! Damit die Seite richtig gut wird und nur echte Inhalte drauf sind, kurz ein paar Fragen:\n\n```questions\nWofür ist die Webseite? | Mein Verein | Mein Portfolio | Ein Produkt | Eine Veranstaltung\nWelcher Stil gefällt dir? | Modern & dunkel | Hell & freundlich | Bunt & verspielt\nWelche Bereiche soll sie haben? | Über uns | Galerie | Termine | Kontakt\nWie heißt dein Projekt?\n```', onText, signal, 6, 8);
-  }
+  // Keine Rückfragen-Kästen mehr: ApeX trifft Annahmen und baut direkt
   await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue die Seite Schritt für Schritt: Entwurf, Design-System, Abschnitte, Prüfung.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
   if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }
   if (site) {
     if (!canAfford(credits, 'site')) return emitText(`**ApeX (Demo)** – für eine Webseite reicht dein Tagesbudget heute nicht mehr (noch ${credits.left} Credits). Um Mitternacht gibt es neue.`, onText, signal);
     work.sites = 1;
+    onStep({ kind: 'plan', text: 'Auftrag verstehen und planen' });
     onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
     await sleep(300); onStep({ kind: 'draft', text: '3 Abschnitte: nav, zaehler, footer' });
     for (const id of ['nav', 'zaehler', 'footer']) { await sleep(250); onStep({ kind: 'section', text: `Abschnitt „${id}“` }); }

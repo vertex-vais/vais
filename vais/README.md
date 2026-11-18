@@ -65,6 +65,12 @@ Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 4. `MAIL_FROM` = `ApeX <deine-adresse@gmail.com>` (genau die bestätigte Adresse). Ein alter Anzeigename `VAIs` wird beim Versand automatisch zu ApeX.
 5. `KEY_ENCRYPTION_SECRET` = langer Zufallswert (`openssl rand -base64 32`). Damit verschlüsselt der Admin-Bereich die Cursor-API-Keys (AES-256-GCM). Setzen, bevor der erste Key gespeichert wird. Fehlt die Variable, leitet der Server den Schlüssel aus `DATABASE_TOKEN` (sonst `SMTP_PASS`, `BREVO_API_KEY`, `GOOGLE_CLIENT_SECRET`) ab und warnt im Log. `CURSOR_API_KEY` ist nur der Ersatz, wenn im Admin kein aktiver Key frei ist.
 
+#### Agent-Modus und Programmier-Agent (optional)
+Große Bau-Aufträge („Bau die CHECK24-App in Rot nach“) laufen automatisch im Agent-Modus: planen → Vorlage recherchieren → bauen → gegen den Auftrag und auf dem Handy prüfen → überarbeiten. Ist im Admin-Bereich unter „API-Keys“ ein Cursor-Key hinterlegt, baut ein Cursor Cloud Agent die Seite – **immer ohne Repository** (kein Zugriff auf GitHub-Repos), Name im Cursor-Dashboard „username – Thema“. Klappt das nicht, baut ApeX mit dem eigenen Baukasten.
+- `CURSOR_AGENT_BUILDS` – `0` = aus, `staff` = nur Admins/Mods, sonst für alle (mit Limits)
+- `CURSOR_USER_DAILY_LIMIT` (Standard 2), `CURSOR_ADMIN_DAILY_LIMIT` (Admins im Testmodus, Standard 10), `CURSOR_GLOBAL_DAILY_LIMIT` (alle zusammen, Standard 30)
+- `CURSOR_AGENT_MODEL` (optional, Modell-ID aus `GET /v1/models`), `CURSOR_AGENT_TIMEOUT_MS` (Standard 12 Minuten)
+
 ### 3. KI-Modelle: OpenRouter
 1. openrouter.ai → **Sign in** (mit Google oder GitHub).
 2. Menü → **Keys** → **Create Key** → kopieren → das ist `OPENROUTER_API_KEY`.

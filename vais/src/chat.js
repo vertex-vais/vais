@@ -552,6 +552,8 @@ chat.post('/stream', wrap(async (req, res) => {
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
           work,
           credits: budget ? { left: budget.left, imagesLeft: budget.imagesLeft, costs } : null,
+          // für den Programmier-Agenten: Tageslimit pro Person, Name „username – Thema“, Testmodus
+          user: { id: req.user.id, email: req.user.email, role: req.user.role, test_mode: req.user.test_mode },
         });
       }
     } else {
