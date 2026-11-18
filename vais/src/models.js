@@ -751,6 +751,8 @@ const M = {
   nvDeepseek: /^nvidia:.*deepseek-v4(\.1)?-flash$/, // nvidia/deepseek-v4.1-flash und deepseek-ai/deepseek-v4-flash
   nvNemo: /^nvidia:.*nemotron-3-ultra/, // nvidia/nemotron-3-ultra-550b-a55b
   nvGlm: /^nvidia:.*glm-5\.3-flash$/, // z-ai/glm-5.3-flash
+  // Cloudflare Workers AI, schnell (Name steht bei eigenen Schlüsseln im Modellnamen, nicht in der ID)
+  cfFast: /fp8-fast|@cf\/meta\/llama/,
   mistral: /^mistral:/,
 };
 export const RANKING = {
@@ -766,10 +768,11 @@ export const RANKING = {
   vision: [M.gemma31, M.nemoVL, M.flash, M.orGemma, M.inkling, M.mistral, M.orFree],
   // Titel, Vorschläge, Zusammenfassungen
   helper: [M.gptoss20, M.gemma26, M.flashLite, M.gemma31, M.qwen, M.gptoss120, M.orFree],
-  // ApeX (braucht Werkzeuge). Groq zuerst, solange es frei ist. Danach die stärksten anderen, am Ende jedes freie OpenRouter-Modell.
-  agent: [M.gptoss120, M.hydrogen, M.nvKimi, M.nvDeepseek, M.gemma31, M.orGemma, M.nemoUltra, M.nvNemo, M.inkling, M.inkling2, M.nvGlm, M.qwen, M.gptoss20, M.flash, M.flashLite, M.nemoVL, M.orFree],
-  // Ersatz: stärkstes freies Modell zuerst. Qwen bleibt vor gpt-oss-120b, damit ein volles 120b nicht sofort wieder drankommt.
-  agentBackup: [M.hydrogen, M.nvKimi, M.nvDeepseek, M.gemma31, M.orGemma, M.nemoUltra, M.nvNemo, M.inkling2, M.inkling, M.nvGlm, M.nemoVL, M.qwen, M.flash, M.flashLite, M.gptoss20, M.gptoss120, M.orFree],
+  // ApeX: Groq-120b zuerst, wenn es frei ist. Danach schnelle Modelle, langsame Denker (Kimi) ganz hinten.
+  agent: [M.gptoss120, M.gptoss20, M.qwen, M.flash, M.flashLite, M.cfFast, M.orFree, M.gemma31, M.orGemma, M.hydrogen, M.inkling, M.inkling2, M.nemoUltra, M.nvDeepseek, M.nvNemo, M.nvGlm, M.nemoVL, M.nvKimi],
+  // Ersatz und Smalltalk: schnell zuerst. Kimi ist kein Notfall für „Hallo“.
+  agentFast: [M.gptoss20, M.qwen, M.flashLite, M.flash, M.cfFast, M.orFree, M.gemma26, M.orGemma, M.inkling2, M.gptoss120],
+  agentBackup: [M.gptoss20, M.qwen, M.flashLite, M.flash, M.cfFast, M.orFree, M.gemma31, M.orGemma, M.inkling2, M.inkling, M.nemoVL, M.gptoss120, M.hydrogen, M.nvDeepseek, M.nvNemo, M.nvGlm, M.nemoUltra, M.nvKimi],
   translate: [M.gptoss120, M.gemma31, M.qwen, M.inkling, M.gptoss20, M.flash, M.orFree],
   // Bilder (Pollinations): Flux zuerst, dann andere starke, kleine Modelle zuletzt
   image: [/^pollinations:.*flux/i, /^pollinations:.*(z-image|zimage)/i, /^pollinations:.*(gpt-?image|nano|seedream|qwen-image|kontext)/i, /^pollinations:(?!.*sana)/i, /^pollinations:/i],
@@ -781,7 +784,7 @@ export function rankModels(task, models, { cap = null, includeBusy = false, excl
   const seen = new Set(exclude);
   for (const re of RANKING[task] ?? RANKING.smart) {
     const hits = models
-      .filter((m) => !seen.has(m.id) && !m.paid && re.test(m.id) && (!cap || m.caps.includes(cap)) && (includeBusy || !m.busy))
+      .filter((m) => !seen.has(m.id) && !m.paid && (re.test(m.id) || re.test(String(m.name ?? ''))) && (!cap || m.caps.includes(cap)) && (includeBusy || !m.busy))
       .sort((a, b) => String(b.upstream).localeCompare(String(a.upstream), 'en', { numeric: true }));
     for (const h of hits) { seen.add(h.id); out.push(h); }
   }
@@ -1035,27 +1038,121 @@ function demoImage(name, text) {
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für ApeX)
+const stallError = () => Object.assign(new Error(t('Das Modell hat zu lange geschwiegen.', 'The model was silent too long.')), { status: 504, raw: 'timeout' });
+
+// stallMs gilt bis zum ersten Token. Danach darf das Modell in Ruhe fertig schreiben.
+function stallGuard(stallMs, signal, timeoutMs) {
+  const stall = new AbortController();
+  let timer;
+  const kick = (ms) => { clearTimeout(timer); timer = setTimeout(() => stall.abort(), ms); };
+  if (stallMs > 0) kick(stallMs);
+  const parts = [AbortSignal.timeout(timeoutMs)];
+  if (signal) parts.push(signal);
+  if (stallMs > 0) parts.push(stall.signal);
+  return {
+    signal: AbortSignal.any(parts),
+    touch(delta) {
+      const useful = delta?.content || delta?.reasoning || delta?.reasoning_content || delta?.tool_calls;
+      if (!useful || !(stallMs > 0)) return;
+      kick(40_000);
+    },
+    stop() { clearTimeout(timer); },
+    stalled() { return stallMs > 0 && stall.signal.aborted && !signal?.aborted; },
+  };
+}
+
+async function readAnswer(res, guard, signal) {
+  const ctype = res.headers.get('content-type') || '';
+  if (!/event-stream/i.test(ctype)) {
+    const json = await res.json();
+    guard.touch({ content: json?.choices?.[0]?.message?.content || 'ok' });
+    return json;
+  }
+  const dec = new TextDecoder();
+  let buf = '';
+  const message = { role: 'assistant', content: '', tool_calls: [] };
+  let finish = null;
+  try {
+    const reader = res.body.getReader();
+    while (true) {
+      if (guard.stalled()) throw stallError();
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') return { choices: [{ message: cleanTools(message), finish_reason: finish }] };
+        let json;
+        try { json = JSON.parse(data); } catch { continue; }
+        if (json.error) throw fail('stream', Number(json.error.code) || 500, json.error.message, { label: 'KI', env: '' });
+        const delta = json.choices?.[0]?.delta ?? {};
+        guard.touch(delta);
+        if (delta.content) message.content += delta.content;
+        if (delta.reasoning) message.reasoning = (message.reasoning || '') + delta.reasoning;
+        if (delta.reasoning_content) message.reasoning_content = (message.reasoning_content || '') + delta.reasoning_content;
+        for (const tc of delta.tool_calls ?? []) {
+          const i = tc.index ?? message.tool_calls.length;
+          const cur = message.tool_calls[i] ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
+          if (tc.id) cur.id = tc.id;
+          if (tc.function?.name) cur.function.name += tc.function.name;
+          if (tc.function?.arguments) cur.function.arguments += tc.function.arguments;
+          message.tool_calls[i] = cur;
+        }
+        finish = json.choices?.[0]?.finish_reason ?? finish;
+      }
+    }
+    return { choices: [{ message: cleanTools(message), finish_reason: finish }] };
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    if (guard.stalled() || err?.status === 504) throw err?.status ? err : stallError();
+    throw err;
+  }
+}
+const cleanTools = (message) => {
+  message.tool_calls = message.tool_calls.filter((tc) => tc?.function?.name);
+  if (!message.tool_calls.length) delete message.tool_calls;
+  return message;
+};
+
+function abortedByStall(err, signal) {
+  if (signal?.aborted) return false;
+  const msg = `${err?.name ?? ''} ${err?.message ?? ''}`;
+  return err?.status === 504 || err?.name === 'TimeoutError' || err?.name === 'AbortError' || /aborted due to timeout|operation was aborted|zu lange geschwiegen/i.test(msg);
+}
+
 export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000, stallMs = 0 }) {
-  // stallMs: ApeX bricht ab, wenn so lange kein Byte kommt, und wechselt das Modell
-  if (stallMs > 0) timeoutMs = Math.min(timeoutMs, stallMs);
+  // stallMs ist die Zeit bis zum ersten Token, nicht die ganze Antwort
+  const guard = stallGuard(stallMs, signal, timeoutMs);
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   if (provider === 'custom') {
     const row = cachedKeys('custom').find((k) => String(k.id) === upstream);
     if (!row?.key || !row.baseUrl) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
-    const res = await fetch(`${row.baseUrl}/chat/completions`, {
-      method: 'POST',
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-      headers: { Authorization: `Bearer ${row.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: row.model, messages, ...(maxTokens ? { max_tokens: maxTokens } : { max_tokens: MAX_OUTPUT_TOKENS }) }),
-    });
+    let res;
+    try {
+      res = await fetch(`${row.baseUrl}/chat/completions`, {
+        method: 'POST',
+        signal: guard.signal,
+        headers: { Authorization: `Bearer ${row.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: row.model, messages, stream: stallMs > 0, ...(maxTokens ? { max_tokens: maxTokens } : { max_tokens: MAX_OUTPUT_TOKENS }) }),
+      });
+    } catch (err) {
+      guard.stop();
+      if (abortedByStall(err, signal)) throw stallError();
+      throw err;
+    }
     if (res.status === 401 || res.status === 429) noteFailureBySecret('custom', row.key, res.status);
     if (!res.ok) {
+      guard.stop();
       const body = await res.json().catch(() => ({}));
       const err = Array.isArray(body) ? body[0]?.error : body?.error;
       throw fail(model, res.status, err?.message, { label: row.label || 'Custom', env: 'CUSTOM_OPENAI_API_KEY' });
     }
-    const json = await res.json();
+    const json = await readAnswer(res, guard, signal).finally(() => guard.stop());
     noteOk(model);
     const message = json.choices?.[0]?.message ?? { content: '' };
     message.finish = json.choices?.[0]?.finish_reason ?? null;
@@ -1067,29 +1164,38 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
   const p = PROVIDERS[provider];
   if (!p?.keys.length) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
-  const res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
-    method: 'POST',
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...(provider === 'openrouter' ? { 'HTTP-Referer': publicOrigin() || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
-    },
-    body: JSON.stringify({
-      model: upstream,
-      messages,
-      ...(maxTokens ? { max_tokens: maxTokens } : tokenLimit(provider, upstream)),
-      ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
-      // wie viel das Modell vorher nachdenkt (Denken kostet Ausgabe-Tokens) – nur gpt-oss, wie bisher
-      ...(reasoningEffort && /gpt-oss/.test(upstream) ? (provider === 'openrouter' ? { reasoning: { effort: reasoningEffort } } : reasoningParams(provider, upstream, reasoningEffort)) : {}),
-    }),
-  }));
+  let res;
+  try {
+    res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
+      method: 'POST',
+      signal: guard.signal,
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        ...(provider === 'openrouter' ? { 'HTTP-Referer': publicOrigin() || 'https://vais.onrender.com', 'X-Title': 'ApeX' } : {}),
+      },
+      body: JSON.stringify({
+        model: upstream,
+        messages,
+        stream: stallMs > 0,
+        ...(maxTokens ? { max_tokens: maxTokens } : tokenLimit(provider, upstream)),
+        ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
+        // wie viel das Modell vorher nachdenkt (Denken kostet Ausgabe-Tokens) – nur gpt-oss, wie bisher
+        ...(reasoningEffort && /gpt-oss/.test(upstream) ? (provider === 'openrouter' ? { reasoning: { effort: reasoningEffort } } : reasoningParams(provider, upstream, reasoningEffort)) : {}),
+      }),
+    }));
+  } catch (err) {
+    guard.stop();
+    if (abortedByStall(err, signal)) throw stallError();
+    throw err;
+  }
   if (!res.ok) {
+    guard.stop();
     const body = await res.json().catch(() => ({}));
     const err = Array.isArray(body) ? body[0]?.error : body?.error;
     throw fail(model, res.status, err?.message, p);
   }
-  const json = await res.json();
+  const json = await readAnswer(res, guard, signal).finally(() => guard.stop());
   noteOk(model);
   const message = json.choices?.[0]?.message ?? { content: '' };
   message.finish = json.choices?.[0]?.finish_reason ?? null; // 'length' = abgeschnitten

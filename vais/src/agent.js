@@ -55,10 +55,25 @@ export function quickReaction(messages) {
 }
 
 // Das stärkste verfügbare Modell mit Werkzeug-Unterstützung (Rangliste in models.js)
-async function pickModel(task) {
+async function pickModel(task, backup = 'agentBackup') {
   const all = await listModels();
   // Freie Modelle der Aufgabe, dann der Ersatz (auch andere Anbieter). Ein schon volles Modell erst ganz zuletzt.
-  return rankModels(task, all)[0] ?? rankModels('agentBackup', all)[0] ?? rankModels(task, all, { includeBusy: true })[0] ?? null;
+  return rankModels(task, all)[0] ?? rankModels(backup, all)[0] ?? rankModels(task, all, { includeBusy: true })[0] ?? null;
+}
+
+// Kurzer Gruß oder ein Satz Smalltalk: schnelle Modelle, nie ein langsamer Denker.
+const plainUser = (messages) => {
+  const last = [...(messages ?? [])].reverse().find((m) => m.role === 'user');
+  const c = last?.content;
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) return c.filter((p) => p.type === 'text').map((p) => p.text).join(' ');
+  return '';
+};
+export function isSmallTalk(text) {
+  const s = String(text ?? '').trim();
+  if (!s || s.length > 80 || /```|https?:/i.test(s)) return false;
+  if (/\b(bau|erstell|recherch|such(?:e|en)?|code|programm|website|webseite|app|spiel|erkl[aä]r|warum|wieso|weshalb|wie |was ist|what |why |how |write |build |search|compare|vergleich)/i.test(s)) return false;
+  return s.split(/\s+/).length <= 8;
 }
 
 const REMEMBER_TOOL = {
@@ -721,11 +736,14 @@ const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|
 // 400 „keine Werkzeuge“ ist kein Grund aufzugeben: das nächste Modell kann Werkzeuge.
 export function canSwitchModel(err) {
   if (!err) return false;
-  const raw = `${err.raw ?? ''}\n${err.message ?? ''}`;
+  const raw = `${err.name ?? ''}\n${err.raw ?? ''}\n${err.message ?? ''}`;
+  // Zeitüberschreitung eines Anbieters: weiter zum nächsten, nicht die Antwort beenden
+  if (err.status === 504 || err.name === 'TimeoutError' || /aborted due to timeout|operation was aborted|zu lange geschwiegen|silent too long/i.test(raw)) return true;
   if (err.status === 400 && /tool|function[_\s-]?call|tool_choice|does not support/i.test(raw)) return true;
   if (tooBig(err)) return true;
   return [429, 500, 502, 503, 504].includes(err.status);
 }
+const calmFail = () => new Error(t('Gerade antwortet kein Modell. Versuch es gleich noch einmal.', 'No model can answer right now. Please try again in a moment.'));
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
 
 // Nichts Brauchbares: kein Text und keine Emoji-Reaktion
@@ -738,7 +756,8 @@ const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null, onFallback = null }) {
   onStep?.({ kind: 'read', text: hasImagesIn(messages) ? t('Ich sehe mir das an …', 'Looking at this …') : t('Ich lese deine Frage …', 'Reading your question …') });
   if (demoMode) return demoAgent({ work, credits, messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
-  const model = await pickModel('agent');
+  const talk = isSmallTalk(plainUser(messages));
+  const model = await pickModel(talk ? 'agentFast' : 'agent', talk ? 'agentFast' : 'agentBackup');
   if (!model) throw new Error(t('ApeX ist gerade nicht erreichbar. Versuch es gleich noch einmal.', 'ApeX is not reachable right now. Please try again shortly.'));
 
   const addSources = sourceCleaner(onSources);
@@ -818,11 +837,15 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   let current = model;
   const tried = new Set([model.id]);
   let waited = 0;
+  const lane = talk ? 'agentFast' : 'agentBackup';
+  // Erstes Token: Smalltalk und jeder Ersatz kurz (12 s). Das große Hauptmodell darf 25 s nachdenken.
+  const firstStall = talk ? 12_000 : 25_000;
   async function ask(extra = {}) {
     for (let attempt = 0; attempt < 9; attempt++) {
       try {
         work.calls = (work.calls ?? 0) + 1;
-        return await complete({ model: current.id, messages: convo, signal, stallMs: 10_000, ...extra });
+        const stallMs = current.id === model.id ? firstStall : 12_000;
+        return await complete({ model: current.id, messages: convo, signal, stallMs, ...extra });
       } catch (err) {
         if (signal?.aborted) throw err;
         // Nur das Minuten-Limit: kurz warten statt aufgeben (z. B. nach dem Bau einer großen Webseite)
@@ -834,15 +857,15 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
         if (!canSwitchModel(err)) throw err;
         if (tooBig(err) && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
         const all = await listModels();
-        const next = rankModels('agentBackup', all, { exclude: [...tried] })[0];
-        if (!next) throw err;
+        const next = rankModels(lane, all, { exclude: [...tried] })[0];
+        if (!next) throw calmFail();
         console.log(`ApeX: ${current.id} → ${next.id} (${err.message})`);
         onFallback?.({ from: current, to: next, message: err.message });
         tried.add(next.id);
         current = next;
       }
     }
-    throw new Error(t('ApeX konnte gerade nicht antworten. Versuch es gleich noch einmal.', 'ApeX could not answer right now. Please try again shortly.'));
+    throw calmFail();
   }
 
   // Nachträge, die der Nutzer während der Arbeit schickt, sofort berücksichtigen

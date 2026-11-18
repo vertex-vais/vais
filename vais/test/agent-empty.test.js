@@ -38,6 +38,7 @@ test('400 ohne Werkzeuge probiert das nächste Modell, ein normales 400 nicht', 
   assert.equal(canSwitchModel({ status: 400, raw: 'This model does not support tools' }), true);
   assert.equal(canSwitchModel({ status: 400, message: 'invalid image' }), false);
   assert.equal(canSwitchModel({ status: 429, raw: 'tokens per day (TPD)' }), true);
+  assert.equal(canSwitchModel({ name: 'TimeoutError', message: 'The operation was aborted due to timeout' }), true);
 });
 
 test('Reaktion 👋 ist erlaubt; nur-Emoji-Antworten zählen nicht als leer', () => {

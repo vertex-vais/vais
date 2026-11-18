@@ -820,9 +820,10 @@ function updateCard(turnIndex, side) {
   } else if (!a.text && a.reaction && a.status === 'done') {
     body.innerHTML = `<p class="react-only">${t('Hat mit', 'Reacted with')} <span>${escapeHtml(a.reaction)}</span> ${t('reagiert', '')}</p>`;
   } else if (!a.text) {
+    // Eine Statuszeile. Mit Arbeitsschritten steht sie oben; sonst nur „Denke nach…“.
     body.innerHTML = a.status === 'stopped'
       ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
-      : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span><em class="load-word">${loadWord()}</em></div>`;
+      : (a.steps?.length ? '' : `<div class="typing" aria-label="${t('Denke nach…', 'Thinking…')}"><span></span><span></span><span></span><em>${t('Denke nach…', 'Thinking…')}</em></div>`);
   } else {
     body.innerHTML = markdown(a.text);
     // Turbo: kurze Frage → blitzschnelles Modell; auf Wunsch genauer mit dem stärksten Modell
@@ -834,18 +835,8 @@ function updateCard(turnIndex, side) {
   linkCites(body, a.sources);
 }
 
-// Kurze Lade-Sprüche, solange die KI noch nichts geschrieben hat („Kocht …“, „Brutzelt …“)
-const LOAD_WORDS = () => t(
-  ['Kocht …', 'Brutzelt …', 'Grübelt …', 'Tüftelt …', 'Zaubert …', 'Brodelt …', 'Knobelt …', 'Mixt …', 'Schmiedet …', 'Rechnet …', 'Funkt …', 'Sortiert …', 'Lädt Hirn …', 'Denkt …'],
-  ['Cooking …', 'Cooked …', 'Brewing …', 'Crafting …', 'Thinking …', 'Plotting …', 'Mixing …', 'Forging …', 'Vibing …', 'Loading brain …'],
-);
-let loadIdx = Math.floor(Math.random() * 10);
-const loadWord = () => { const w = LOAD_WORDS(); return w[loadIdx % w.length]; };
+// Sekundenzähler der Statuszeile, solange ApeX noch schreibt
 setInterval(() => {
-  const els = document.querySelectorAll('.load-word');
-  if (!els.length) return;
-  loadIdx += 1 + Math.floor(Math.random() * 3);
-  els.forEach((e) => { e.classList.remove('swap'); void e.offsetWidth; e.textContent = loadWord(); e.classList.add('swap'); });
   document.querySelectorAll('.work.live').forEach((box) => {
     const card = box.closest('.card');
     const turn = card?.closest('.turn');
@@ -956,12 +947,11 @@ function workLine(a) {
       ? t(`Suche im Web… ${n} ${srcWord(n)}`, `Searching the web… ${n} ${srcWord(n)}`)
       : t('Suche im Web…', 'Searching the web…');
   }
-  if (last?.kind === 'read') return t('Lese eine Seite…', 'Reading a page…');
+  if (last?.kind === 'read' && /https?:|www\.|\bseite\b|\.[a-z]{2,}\//i.test(last.text || '')) return t('Lese eine Seite…', 'Reading a page…');
+  if (last?.kind === 'read') return t('Denke nach…', 'Thinking…');
   if (last?.kind === 'plan' || last?.kind === 'draft') return t('Plane den nächsten Schritt…', 'Planning the next step…');
   if (last?.text) return `${STEP_LABEL[last.kind] ?? t('Schritt', 'Step')}… ${last.text}`;
-  const phrases = [t('Denke nach…', 'Thinking…'), t('Plane den nächsten Schritt…', 'Planning the next step…')];
-  const i = Math.floor((Date.now() - (a.startedAt || Date.now())) / 2800);
-  return phrases[Math.abs(i) % phrases.length];
+  return t('Denke nach…', 'Thinking…');
 }
 function renderSteps(card, a) {
   let box = $('.work', card);
