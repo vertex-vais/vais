@@ -222,6 +222,8 @@ function haptic(kind = 'tap') {
     return;
   }
   if (!navigator.vibrate) return;
+  // Ohne frische Nutzeraktion (z. B. wenn die Antwort später fertig ist) schreibt Chrome einen Fehler.
+  if (navigator.userActivation && !navigator.userActivation.isActive) return;
   try { navigator.vibrate({ tap: 8, send: 12, success: [10, 40, 14], error: [30, 50, 30] }[kind] ?? 8); } catch { /* egal */ }
 }
 
@@ -625,6 +627,7 @@ function renderTurn(turnIndex) {
   const bubble = $('.bubble', node);
   bubble.textContent = turn.user;
   if (!turn.user) bubble.remove();
+  if (!turn.user && turn.jobId) $('.turn-user', node).hidden = true;
   $('.turn-user', node).insertAdjacentHTML('beforeend', `
     <div class="user-actions">
       <button type="button" class="mini-btn" data-uact="copy" aria-label="${t('Nachricht kopieren', 'Copy message')}" title="${t('Kopieren', 'Copy')}">${ICON.copy}</button>
@@ -1099,6 +1102,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
           paintReactions(turnIndex);
           if (a.reaction && a.reaction !== '👀') haptic('tap');
         }
+        if (msg.job) startJobWatch(msg.job);
         if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
         if (msg.auto) { a.auto = msg.auto; scheduleUpdate(turnIndex, side); }
         if (msg.cached) { a.cached = true; scheduleUpdate(turnIndex, side); }
@@ -1132,6 +1136,44 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
     if (state.chat === chat) updateCard(turnIndex, side);
     updateSend();
   }
+}
+
+function paintJob(job) {
+  const chat = state.chat;
+  if (!chat || job.chatId && job.chatId !== chat.id) return;
+  let card = el.thread.querySelector(`.job-card[data-job="${job.id}"]`);
+  if (job.status !== 'running') {
+    card?.remove();
+    if (job.status === 'done' && job.text && !chat.turns.some((tn) => tn.jobId === job.id)) {
+      chat.turns.push({ user: '', jobId: job.id, answers: [{ text: job.text, status: 'done', error: null, steps: [], sources: [] }] });
+      const node = renderTurn(chat.turns.length - 1);
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    return;
+  }
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'job-card';
+    card.dataset.job = job.id;
+    card.innerHTML = `<span class="chat-spin" aria-hidden="true"></span><span></span>`;
+    el.thread.append(card);
+  }
+  card.lastElementChild.textContent = job.detail || t('Arbeitet im Hintergrund…', 'Working in the background…');
+}
+let jobTimer = 0;
+function startJobWatch(job) {
+  paintJob(job);
+  if (jobTimer || !state.chat?.id) return;
+  const chatId = state.chat.id;
+  jobTimer = setInterval(async () => {
+    if (!state.chat || state.chat.id !== chatId) { clearInterval(jobTimer); jobTimer = 0; return; }
+    try {
+      const data = await (await fetch(`/api/chat/jobs?chatId=${encodeURIComponent(chatId)}`)).json();
+      const list = data.jobs || [];
+      list.forEach(paintJob);
+      if (!list.some((item) => item.status === 'running')) { clearInterval(jobTimer); jobTimer = 0; }
+    } catch { /* später nochmal */ }
+  }, 3000);
 }
 
 function afterTurn() {

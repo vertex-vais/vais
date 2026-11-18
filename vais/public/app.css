@@ -922,6 +922,7 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 .work-extra[hidden] { display: none; }
 .work-extra { padding: 4px 0 2px 4px; }
 .work-meta { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.job-card { display: flex; align-items: center; gap: 8px; margin: 4px 0 18px; color: var(--muted); font-size: 14px; }
 .card-foot { display: flex; gap: 2px; margin: 10px 0 0 -8px; }
 .card-foot .card-btn { color: var(--muted); }
 .card-foot .card-btn:hover { color: var(--text); }

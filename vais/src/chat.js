@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
-import { isStaff, inTestMode, isUnlimited } from './config.js';
+import { isStaff, isAdmin, inTestMode, isUnlimited } from './config.js';
 
 // ApeX ist die EINZIGE KI – für alle, auch für Admins und Mods im Testmodus (der bedeutet nur noch „keine Limits“ für Admins).
 // Die alten Module (Battle, Side by Side, Direkt, Agentenchats) ruhen: Code bleibt, ist aber nicht mehr erreichbar.
@@ -14,7 +14,9 @@ import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
-import { runAgent, quickReaction } from './agent.js';
+import { runAgent, quickReaction, isQuick } from './agent.js';
+import { launchJob, jobsFor } from './jobs.js';
+import { classifyTask } from './agentloop.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { basePrompt } from './prompt.js';
 import { ledger, ledgerOf, ledgerText, ledgerAddText } from './ledger.js';
@@ -240,11 +242,13 @@ chat.post('/start', wrap(async (req, res) => {
   const incognito = req.body?.incognito ? 1 : null; // wird nicht gespeichert (verschwindet beim Verlassen)
   // Höchstens „maxChats“ gespeicherte Chats pro Person (Inkognito zählt nicht)
   const { maxChats } = await limitSettings();
-  if (maxChats && !incognito && !isUnlimited(req.user)) {
+  // Admin und Inhaber haben kein Chat-Limit. Sonst wird der älteste Chat still archiviert – nichts wird gelöscht.
+  if (maxChats && !incognito && !isUnlimited(req.user) && !isAdmin(req.user)) {
     await run('DELETE FROM chats WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id) AND created_at < ?', req.user.id, Date.now() - 60_000);
-    const open = Number((await get('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND incognito IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)', req.user.id))?.n ?? 0);
+    const open = Number((await get('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND incognito IS NULL AND COALESCE(archived, 0) = 0 AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)', req.user.id))?.n ?? 0);
     if (open >= maxChats) {
-      throw new HttpError(409, t(`Du hast schon ${maxChats} Chats. Lösche einen, um einen neuen zu starten.`, `You already have ${maxChats} chats. Delete one to start a new one.`), { chatLimit: maxChats, open });
+      const oldest = await get(`SELECT id FROM chats WHERE user_id = ? AND incognito IS NULL AND COALESCE(archived, 0) = 0 AND pinned IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id) ORDER BY COALESCE(updated_at, created_at) ASC LIMIT 1`, req.user.id);
+      if (oldest) await run('UPDATE chats SET archived = 1 WHERE id = ?', oldest.id);
     }
   }
   const id = randomBytes(12).toString('base64url');
@@ -390,11 +394,15 @@ chat.post('/stream', wrap(async (req, res) => {
         : 'text';
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
-  // Prüfung, FAQ und Gedächtnis gleichzeitig – nicht nacheinander vor der Antwort
-  const safetyP = quick ? Promise.resolve(null) : checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
-  const faqP = !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? faqMatch(lastText).catch(() => null) : Promise.resolve(null);
+  const trivial = model === 'agent' && (isQuick(lastText) || !!classifyTask(lastText));
+  const lap = (stage) => console.log(`ApeX Zeit ${stage}: ${Date.now() - sentAt} ms`);
+  lap('eingang');
+  // Kurze Nachrichten: keine Prüf- oder FAQ-Runde vor dem Modell. Sonst läuft das parallel.
+  const safetyP = (quick || trivial) ? Promise.resolve(null) : checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
+  const faqP = quick || req.body?.fresh || !['direct', 'agent'].includes(row.mode) || row.modality === 'image' || hasImages ? Promise.resolve(null) : faqMatch(lastText).catch(() => null);
   const personalP = personalFor(req.user.id);
   const blocked = await safetyP;
+  lap('pruefung');
   // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, kostet nichts
   const faq = blocked ? null : await faqP;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
@@ -413,6 +421,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const budget = charged ? await budgetOf(req.user) : null;
   let cost = 0; // am Ende abgerechnete Credits
   const personal = await personalP;
+  lap('gedaechtnis');
   // Agentenchats (Beta): nutzen das Gedächtnis auch, wenn es sonst aus ist
   if (row.mode === 'life' && !personal.memoryOn && !row.incognito) {
     personal.memories = (await all('SELECT id, text FROM memories WHERE user_id = ? ORDER BY id', req.user.id)).map((m) => ({ id: Number(m.id), text: m.text }));
@@ -542,6 +551,7 @@ chat.post('/stream', wrap(async (req, res) => {
       out(`${JSON.stringify({ r })}\n`);
     };
     const onReact = (emoji) => { reaction = emoji || null; out(`${JSON.stringify({ react: reaction ?? '' })}\n`); };
+    lap('modell');
     if (model === 'agent') {
       if (quick) onReact(quick);
       else {
@@ -569,6 +579,16 @@ chat.post('/stream', wrap(async (req, res) => {
           credits: budget ? { left: budget.left, imagesLeft: budget.imagesLeft, costs } : null,
           // für den Programmier-Agenten: Tageslimit pro Person, Name „username – Thema“, Testmodus
           user: { id: req.user.id, email: req.user.email, role: req.user.role, test_mode: req.user.test_mode },
+          onBackground: (spec) => {
+            const job = launchJob({
+              userId: req.user.id,
+              chatId: row.id,
+              title: spec.title,
+              run: spec.run,
+              onDone: (done) => appendJobMessage(row.id, done),
+            });
+            out(`${JSON.stringify({ job })}\n`);
+          },
         });
       }
     } else {
@@ -761,13 +781,38 @@ chat.post('/think-summary', wrap(async (req, res) => {
 // ── Verlauf ───────────────────────────────────────────────────────
 chat.get('/list', wrap(async (req, res) => {
   const rows = await all(
-    `SELECT id, title, mode, pinned, folder, COALESCE(updated_at, created_at) AS updated FROM chats
+    `SELECT id, title, mode, pinned, folder, COALESCE(archived, 0) AS archived, COALESCE(updated_at, created_at) AS updated FROM chats
      WHERE user_id = ? AND incognito IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
      ORDER BY updated DESC LIMIT 300`,
     req.user.id,
   );
-  res.json({ maxChats: (await limitSettings()).maxChats, chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated, pinned: !!r.pinned, folder: r.folder || null })) });
+  res.json({ maxChats: isAdmin(req.user) ? 0 : (await limitSettings()).maxChats, chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated, pinned: !!r.pinned, folder: r.folder || null, archived: !!Number(r.archived) })) });
 }));
+
+chat.get('/jobs', wrap(async (req, res) => {
+  const chatId = String(req.query.chatId || '');
+  if (chatId) {
+    const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', chatId, req.user.id);
+    if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  }
+  res.json({ jobs: jobsFor(req.user.id, chatId) });
+}));
+
+async function appendJobMessage(chatId, job) {
+  const row = await get('SELECT COALESCE(MAX(turn), -1) AS t FROM messages WHERE chat_id = ?', chatId);
+  const turn = Number(row?.t ?? -1) + 1;
+  const now = Date.now();
+  const text = String(job.text || job.error || '').slice(0, 1_500_000);
+  await run(
+    'INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    chatId, turn, -1, '', 'done', null, null, now,
+  );
+  await run(
+    'INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    chatId, turn, 0, text, job.status === 'error' ? 'error' : 'done', job.status === 'error' ? text : null, JSON.stringify({ jobId: job.id }), now,
+  );
+  await run('UPDATE chats SET updated_at = ? WHERE id = ?', now, chatId);
+}
 
 // Anheften und Ordner
 chat.post('/organize', wrap(async (req, res) => {
@@ -1182,6 +1227,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
         reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq, cost: Number(meta.cost) || 0,
       };
+      if (meta.jobId) turns[m.turn].jobId = meta.jobId;
     }
   }
   const ids = [row.model_a, row.model_b].filter(Boolean);

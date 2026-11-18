@@ -4,7 +4,7 @@
 import vm from 'node:vm';
 import { buildWebsite, editWebsite, assemble } from './sitebuilder.js';
 import { t, lang } from './i18n.js';
-import { listModels, complete, demoMode, makeSource, rankModels, generateImage } from './models.js';
+import { listModels, complete, demoMode, makeSource, rankModels, generateImage, quickGroqModel } from './models.js';
 import { deepResearch, heavyAnswer, isResearch, isHard } from './deep.js';
 import { runJavaScriptText } from './sandbox.js';
 import { searchWeb, readPage } from './search.js';
@@ -278,7 +278,7 @@ function systemPrompt(personal = {}) {
 // ── Werkzeuge ─────────────────────────────────────────────────────
 // Websuche über src/search.js (Tavily → Exa → Groq → Wikipedia) – gleiche Suche wie der Web-Modus
 async function webSearch(queries, signal, addSources) {
-  const results = await Promise.allSettled(queries.map((q) => searchWeb(q, { signal, max: 6 })));
+  const results = await Promise.allSettled(queries.map((q) => searchWeb(q, { signal, max: 4 })));
   if (signal?.aborted) throw new Error('aborted');
   if (results.every((r) => r.status === 'rejected' || !r.value.results.length)) {
     if (results[0].status === 'rejected') throw results[0].reason;
@@ -287,7 +287,11 @@ async function webSearch(queries, signal, addSources) {
   return results.map((r, i) => {
     const list = r.status === 'fulfilled' ? r.value.results : [];
     const nums = addSources(list.map(({ url, title }) => ({ url, title })));
-    return `### Suche: ${queries[i]}\n${list.length ? list.map((x, k) => `- ${nums[k] ? `[${nums[k]}] ` : ''}${x.title}${x.date ? ` (${x.date})` : ''}\n  ${x.url}\n  ${x.snippet}`).join('\n') : `Fehler: ${r.reason?.message ?? 'keine Ergebnisse'}`}`;
+    const short = list.slice(0, 4).map((x, k) => {
+      const snip = String(x.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      return `- ${nums[k] ? `[${nums[k]}] ` : ''}${x.title}\n  ${x.url}${snip ? `\n  ${snip}` : ''}`;
+    });
+    return `### Suche: ${queries[i]}\n${list.length ? short.join('\n') : `Fehler: ${r.reason?.message ?? 'keine Ergebnisse'}`}`;
   }).join('\n\n');
 }
 
@@ -740,7 +744,19 @@ function squeeze(convo, hard = false) {
     }
   }
 }
-const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
+const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(`${err.raw ?? ''} ${err.message ?? ''}`)) || /zu groß für das kostenlose Limit|too large for this model|context_length|maximum context|request too large|payload too large/i.test(`${err?.raw ?? ''} ${err?.message ?? ''}`);
+// Nach der Suche kurz halten, damit Groq (kleines Token-Fenster) das Hauptmodell nicht wegwirft.
+export function fitToolText(text, max = 1800) {
+  const s = String(text ?? '');
+  return s.length <= max ? s : `${s.slice(0, max)}\n[… gekürzt]`;
+}
+// Zu groß oder Minuten-Limit: dasselbe Modell nochmal mit kürzerem Text. Ein echtes Tageslimit wechselt.
+export function shouldRetrySameModel(err) {
+  const raw = `${err?.raw ?? ''}\n${err?.message ?? ''}`;
+  if (/per day|tageslimit|\bTPD\b|\bdaily\b|\bRPD\b/i.test(raw)) return false;
+  if (tooBig(err)) return true;
+  return err?.status === 429 && /per minute|\bTPM\b|tokens per minute|rate limit/i.test(raw);
+}
 // 400 „keine Werkzeuge“ ist kein Grund aufzugeben: das nächste Modell kann Werkzeuge.
 export function canSwitchModel(err) {
   if (!err) return false;
@@ -761,11 +777,29 @@ const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 // work: hier trägt ApeX ein, was es wirklich gemacht hat (für die Credits-Abrechnung)
 // credits: { left, costs, imagesLeft } – was der Nutzer heute noch hat (left/imagesLeft null = unbegrenzt)
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null, onFallback = null }) {
-  onStep?.({ kind: 'read', text: hasImagesIn(messages) ? t('Ich sehe mir das an …', 'Looking at this …') : t('Ich lese deine Frage …', 'Reading your question …') });
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null, onFallback = null, onBackground = null }) {
+  const t0 = Date.now();
+  const lap = (stage) => console.log(`ApeX Zeit ${stage}: ${Date.now() - t0} ms`);
+  const preview = plainUser(messages);
   if (demoMode) return demoAgent({ work, credits, messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
-  const quick = isQuick(plainUser(messages));
-  const model = await pickModel(quick ? 'agentFast' : 'agent', quick ? 'agentFast' : 'agentBackup');
+  const taskEarly = classifyTask(preview, {});
+  if (taskEarly && onBackground && canAfford(credits, 'site')) {
+    onText(t('Ich baue das im Hintergrund. Du kannst inzwischen weiterfragen.', 'I am building this in the background. You can keep asking in the meantime.'));
+    work.sites = 1;
+    work.answered = true;
+    lap('bau-hintergrund');
+    onBackground({
+      title: preview.slice(0, 80),
+      run: (report) => runBuildTask({
+        question: preview, history: messages, task: taskEarly, user, signal: report.signal, onStep: (step) => report.step(step), thought: () => {}, addSources: () => [], work: {}, validate: validateHtml, deps: agentDeps ?? {},
+      }),
+    });
+    return undefined;
+  }
+  onStep?.({ kind: 'read', text: hasImagesIn(messages) ? t('Ich sehe mir das an …', 'Looking at this …') : t('Ich lese deine Frage …', 'Reading your question …') });
+  const quick = isQuick(preview);
+  const model = quick ? (quickGroqModel() ?? await pickModel('agentFast', 'agentFast')) : await pickModel('agent', 'agentBackup');
+  lap(quick ? 'schnell' : 'modell');
   if (!model) throw new Error(t('ApeX ist gerade nicht erreichbar. Versuch es gleich noch einmal.', 'ApeX is not reachable right now. Please try again shortly.'));
 
   const addSources = sourceCleaner(onSources);
@@ -862,6 +896,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
           signal,
           stallMs,
           timeoutMs: useTools ? 55_000 : 90_000,
+          reasoningEffort: quick && !useTools ? 'low' : undefined,
           onDelta: useTools ? undefined : (chunk) => { streamed += chunk; onText(chunk); },
           ...extra,
         });
@@ -876,8 +911,9 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
           await new Promise((ok) => setTimeout(ok, err.retryAfter + 400));
           continue;
         }
+        console.error(`ApeX Hauptmodell ${current.id} ${err.status ?? '-'} ${String(err.raw || err.message || '').slice(0, 240)}`);
         if (!canSwitchModel(err)) throw err;
-        if (tooBig(err) && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
+        if (shouldRetrySameModel(err) && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
         // Eine langsame Werkzeug-Entscheidung einmal beim selben Modell lassen, nicht sofort auf ein kleines Modell springen
         if (useTools && !held && (err.status === 504 || /geschwiegen|timeout|aborted/i.test(`${err.message ?? ''} ${err.raw ?? ''}`))) {
           held = true;
@@ -905,10 +941,11 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     }
   };
   let emptyRetried = false;
+  let lean = quick; // nach einer Suche ohne Werkzeug-Schema antworten, sonst wird die Anfrage für Groq zu groß
   for (let round = 0; round < MAX_STEPS; round++) {
     takeInbox();
     // Budget aufgebraucht → Such-Werkzeuge gar nicht mehr anbieten
-    const offered = quick ? [] : agentTools.filter((tl) => !((tl.function.name === 'web_search' && ctx.budget.search <= 0) || (tl.function.name === 'read_webpage' && ctx.budget.read <= 0) || (tl.function.name === 'wikipedia' && ctx.budget.wiki <= 0)));
+    const offered = lean ? [] : agentTools.filter((tl) => !((tl.function.name === 'web_search' && ctx.budget.search <= 0) || (tl.function.name === 'read_webpage' && ctx.budget.read <= 0) || (tl.function.name === 'wikipedia' && ctx.budget.wiki <= 0)));
     const msg = await ask(offered.length ? { tools: offered } : {});
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await think(thought);
@@ -950,7 +987,8 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
         return `Fehler: ${err.message}`;
       }
     }));
-    calls.forEach((call, i) => convo.push({ role: 'tool', tool_call_id: call.id, content: String(results[i]).slice(0, 14_000) }));
+    if (calls.some((c) => ['web_search', 'wikipedia', 'read_webpage'].includes(c.function?.name))) lean = true;
+    calls.forEach((call, i) => convo.push({ role: 'tool', tool_call_id: call.id, content: fitToolText(results[i]) }));
     if (calls.some((c) => c.function?.name === 'validate_html')) stripOldHtml(convo);
   }
   // Zu viele Schritte: mit dem bisher Gesammelten antworten

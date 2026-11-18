@@ -791,6 +791,12 @@ export function rankModels(task, models, { cap = null, includeBusy = false, excl
   return out;
 }
 // Das beste freie Modell für eine Aufgabe (oder null)
+// Kurzer Smalltalk, ohne die Modellliste aus dem Netz zu holen (die kostet beim Aufwachen mehrere Sekunden).
+export function quickGroqModel() {
+  if (!PROVIDERS.groq?.keys?.length) return null;
+  return { id: 'groq:openai/gpt-oss-20b', name: 'gpt-oss-20b', provider: 'groq', upstream: 'openai/gpt-oss-20b', maker: 'OpenAI', icon: 'openai', caps: ['text', 'code'] };
+}
+
 export async function pickRanked(task, opts = {}) {
   return rankModels(task, await listModels(), opts)[0] ?? null;
 }
