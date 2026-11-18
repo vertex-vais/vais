@@ -57,8 +57,8 @@ export function quickReaction(messages) {
 // Das stärkste verfügbare Modell mit Werkzeug-Unterstützung (Rangliste in models.js)
 async function pickModel(task) {
   const all = await listModels();
-  // Alle gerade „voll“ (meist nur das Minuten-Limit): trotzdem das beste nehmen – ask() wartet notfalls kurz
-  return rankModels(task, all)[0] ?? rankModels(task, all, { includeBusy: true })[0] ?? null;
+  // Freie Modelle der Aufgabe, dann der Ersatz (auch andere Anbieter). Ein schon volles Modell erst ganz zuletzt.
+  return rankModels(task, all)[0] ?? rankModels('agentBackup', all)[0] ?? rankModels(task, all, { includeBusy: true })[0] ?? null;
 }
 
 const REMEMBER_TOOL = {
@@ -717,6 +717,14 @@ function squeeze(convo, hard = false) {
   }
 }
 const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
+// 400 „keine Werkzeuge“ ist kein Grund aufzugeben: das nächste Modell kann Werkzeuge.
+export function canSwitchModel(err) {
+  if (!err) return false;
+  const raw = `${err.raw ?? ''}\n${err.message ?? ''}`;
+  if (err.status === 400 && /tool|function[_\s-]?call|tool_choice|does not support/i.test(raw)) return true;
+  if (tooBig(err)) return true;
+  return [429, 500, 502, 503, 504].includes(err.status);
+}
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
 
 // Nichts Brauchbares: kein Text und keine Emoji-Reaktion
@@ -726,7 +734,8 @@ const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 // work: hier trägt ApeX ein, was es wirklich gemacht hat (für die Credits-Abrechnung)
 // credits: { left, costs, imagesLeft } – was der Nutzer heute noch hat (left/imagesLeft null = unbegrenzt)
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null, work = {}, credits = null, user = null, agentDeps = null, onFallback = null }) {
+  onStep?.({ kind: 'read', text: hasImagesIn(messages) ? t('Ich sehe mir das an …', 'Looking at this …') : t('Ich lese deine Frage …', 'Reading your question …') });
   if (demoMode) return demoAgent({ work, credits, messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel('agent');
   if (!model) throw new Error(t('ApeX ist gerade nicht erreichbar. Versuch es gleich noch einmal.', 'ApeX is not reachable right now. Please try again shortly.'));
@@ -821,13 +830,13 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
           await new Promise((ok) => setTimeout(ok, err.retryAfter + 400));
           continue;
         }
-        const big = tooBig(err);
-        if (!big && ![429, 500, 502, 503, 504].includes(err.status)) throw err;
-        if (big && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
+        if (!canSwitchModel(err)) throw err;
+        if (tooBig(err) && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
         const all = await listModels();
         const next = rankModels('agentBackup', all, { exclude: [...tried] })[0];
         if (!next) throw err;
         console.log(`ApeX: ${current.id} → ${next.id} (${err.message})`);
+        onFallback?.({ from: current, to: next, message: err.message });
         tried.add(next.id);
         current = next;
       }

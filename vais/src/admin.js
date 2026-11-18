@@ -17,7 +17,7 @@ import { maintenance, forgetMaintenance } from './maintenance.js';
 import { listReports, actOnReport, openReportCount } from './reports.js';
 import { memory, healthList, runHealthCheck } from './stability.js';
 import { faqList, faqSave, faqRemove, topQuestions } from './faq.js';
-import { listUnifiedKeys, listCursorKeysPublic, addProviderKey, addCursorKey, setProviderKeyEnabled, removeProviderKey, testProviderKey, testPlainKey } from './providerKeys.js';
+import { listUnifiedKeys, listCursorKeysPublic, addProviderKey, addCursorKey, setProviderKeyEnabled, removeProviderKey, testProviderKey, testPlainKey, setNvidiaFallback } from './providerKeys.js';
 
 export const admin = Router();
 
@@ -285,6 +285,13 @@ const providerList = (cursorOnly) => cursorOnly ? listCursorKeysPublic() : listU
 const isCursorPath = (req) => /\/cursor-keys(\/|$)/.test(req.path);
 admin.get(['/provider-keys', '/keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
   res.json(await providerList(isCursorPath(req)));
+}));
+// NVIDIA bleibt adminOnly für normale Wege. Dieser Schalter (Standard an) erlaubt nur den ApeX-Ersatz.
+admin.post('/nvidia-fallback', adminOnly, wrap(async (req, res) => {
+  await setNvidiaFallback(!!req.body?.on);
+  forgetModelCache('nvidia');
+  await logEvent('admin', null, `NVIDIA-Ersatz ${req.body?.on ? 'an' : 'aus'}`);
+  res.json(await listUnifiedKeys(keyRuntime));
 }));
 admin.post(['/provider-keys', '/keys', '/cursor-keys'], adminOnly, wrap(async (req, res) => {
   const cursorOnly = isCursorPath(req);

@@ -25,7 +25,7 @@ globalThis.fetch = async (url, opts = {}) => {
   return json({}, 404);
 };
 
-const { runAgent, splitReaction, isEmptyAnswer } = await import('../src/agent.js');
+const { runAgent, splitReaction, isEmptyAnswer, canSwitchModel } = await import('../src/agent.js');
 
 async function agent(text) {
   let out = '';
@@ -33,6 +33,12 @@ async function agent(text) {
   await runAgent({ messages: [{ role: 'user', content: text }], onText: (s) => { out += s; }, onReact: (e) => { reaction = e; }, onStep: () => {}, personal: {} });
   return { out, reaction };
 }
+
+test('400 ohne Werkzeuge probiert das nächste Modell, ein normales 400 nicht', () => {
+  assert.equal(canSwitchModel({ status: 400, raw: 'This model does not support tools' }), true);
+  assert.equal(canSwitchModel({ status: 400, message: 'invalid image' }), false);
+  assert.equal(canSwitchModel({ status: 429, raw: 'tokens per day (TPD)' }), true);
+});
 
 test('Reaktion 👋 ist erlaubt; nur-Emoji-Antworten zählen nicht als leer', () => {
   assert.deepEqual(splitReaction('[[react:👋]]'), { reaction: '👋', text: '' });

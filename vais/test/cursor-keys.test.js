@@ -144,7 +144,13 @@ test('Panel vor Umgebung, NVIDIA nie für normale Nutzer, eigener Endpunkt', asy
     const roster = models.keyStatus().find((p) => p.provider === 'groq');
     assert.ok(roster.keys.some((k) => k.source === 'panel'));
     assert.ok(roster.keys.some((k) => k.source === 'render'));
-    assert.ok(!models.keyStatus().some((p) => p.provider === 'nvidia'));
+    // adminOnly bleibt: getActiveProviderKey ohne admin ist null. Der Ersatz-Schalter (Standard an)
+    // macht den Schlüssel nur in der ApeX-Liste sichtbar.
+    const nvRow = models.keyStatus().find((p) => p.provider === 'nvidia');
+    assert.ok(nvRow && nvRow.keys.length >= 1);
+    await pk.setNvidiaFallback(false);
+    assert.equal(models.keyStatus().find((p) => p.provider === 'nvidia').keys.length, 0);
+    await pk.setNvidiaFallback(true);
   } finally { globalThis.fetch = orig; }
 
   const custom = await pk.addProviderKey({ provider: 'custom', label: 'Eigen', key: 'sk-custom-key-1234567890abcd', baseUrl: 'https://api.example.com/v1', model: 'my-model' });

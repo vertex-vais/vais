@@ -10,7 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { t } from './i18n.js';
 import { getSetting, setSetting } from './db.js';
-import { keysForUser, noteFailureBySecret, peekProviderKey, getActiveProviderKey, cachedKeys, isAdminOnlyProvider } from './providerKeys.js';
+import { keysForUser, noteFailureBySecret, peekProviderKey, getActiveProviderKey, cachedKeys, isAdminOnlyProvider, nvidiaFallbackOn } from './providerKeys.js';
 import { publicOrigin } from './canonical.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
@@ -33,7 +33,15 @@ const PROVIDER_LIST = {
   cerebras: { base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
   mistral: { base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
   github: { base: 'https://models.github.ai/inference', label: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN' },
+  // NVIDIA bleibt adminOnly für normale Wege (providerKeys.js). Hier nur, wenn der Ersatz-Schalter an ist.
+  nvidia: { base: 'https://integrate.api.nvidia.com/v1', label: 'NVIDIA', env: 'NVIDIA_API_KEY' },
 };
+// Panel-Schlüssel für den Chat. NVIDIA (adminOnly) nur, wenn der Ersatz-Schalter an ist.
+function panelSecrets(name) {
+  if (name === 'nvidia') return nvidiaFallbackOn() ? cachedKeys(name).map((k) => k.key) : [];
+  if (isAdminOnlyProvider(name)) return [];
+  return keysForUser(name);
+}
 const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p]) => {
   const fromEnv = envKeys(p.env);
   return [name, {
@@ -41,19 +49,21 @@ const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p
     name,
     fromEnv,
     // Gespeicherte Schlüssel zuerst. Sind sie alle in der Pause, gelten die Umgebungsvariablen.
-    // adminOnly (NVIDIA) kommt hier nie an – auch nicht über eine Env-Variable.
+    // adminOnly außer NVIDIA-Ersatz kommt hier nie an – auch nicht über eine Env-Variable.
     get keys() {
-      if (isAdminOnlyProvider(name)) return [];
-      const panel = keysForUser(name);
+      if (name === 'nvidia' && !nvidiaFallbackOn()) return [];
+      if (isAdminOnlyProvider(name) && name !== 'nvidia') return [];
+      const panel = panelSecrets(name);
       const now = Date.now();
       if (panel.some((k) => (keyCooldown.get(`k:${name}:${k}`) ?? 0) <= now)) return [...new Set(panel)];
       return fromEnv.filter((k) => !panel.includes(k));
     },
     get roster() {
-      if (isAdminOnlyProvider(name)) return [];
-      return [...new Set([...keysForUser(name), ...fromEnv])];
+      if (name === 'nvidia' && !nvidiaFallbackOn()) return [];
+      if (isAdminOnlyProvider(name) && name !== 'nvidia') return [];
+      return [...new Set([...panelSecrets(name), ...fromEnv])];
     },
-    get key() { return freeKeys(name)[0] ?? this.keys[0]; }, // ein gerade freier Schlüssel
+    get key() { return freeKeys(name)[0] ?? this.keys[0]; }, // ein gerade freier Schlüssel (Listen laden)
   }];
 }));
 
@@ -68,12 +78,36 @@ function freeKeys(provider, model = null) {
 // Admin-Alarm (wird von src/alarm.js gesetzt)
 let alarmHandler = () => {};
 export const setAlarmHandler = (fn) => { alarmHandler = fn; };
+// Groq nennt das Modell und TPD/RPD: dann nur DIESES Modell bis Mitternacht sperren (Whisper bleibt nutzbar).
+// Ein Tageslimit ohne Modellbezug sperrt den ganzen Schlüssel.
+const perModelDaily = (msg = '') => /for model\b|\bTPD\b|\bRPD\b|tokens per day|requests per day/i.test(String(msg));
+function noteQuota(provider, key, message) {
+  const id = `${provider}:${key}`;
+  let u = keyUsage.get(id);
+  if (!u || u.day !== utcDay()) {
+    u = { day: utcDay(), requests: 0, limited: 0, last: null, limits: null };
+    keyUsage.set(id, u);
+  }
+  if (/\bTPD\b|tokens per day/i.test(message)) u.tpdExhausted = true;
+  if (/\bRPD\b|requests per day/i.test(message)) u.rpdExhausted = true;
+  saveKeyUsageSoon();
+}
 function markKey(provider, model, key, status, message) {
   const now = Date.now();
   const info = { provider, label: PROVIDERS[provider]?.label ?? provider, id: maskKey(key) };
-  if (status === 429 && isDailyLimit(message)) { keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc()); queueMicrotask(() => alarmHandler('key-full', info)); }
-  else if (status === 401 || status === 403) { keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000); queueMicrotask(() => alarmHandler('key-invalid', info)); }
-  else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + Math.min(90_000, (retryAfterMs(message) ?? 90_000) + 500));
+  if (status === 429 && isDailyLimit(message)) {
+    if (perModelDaily(message)) {
+      const slot = `m:${model}:${key}`;
+      keyCooldown.set(slot, Math.max(keyCooldown.get(slot) ?? 0, nextMidnightUtc()));
+    } else keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc());
+    noteQuota(provider, key, message);
+    queueMicrotask(() => alarmHandler('key-full', info));
+  } else if (status === 401 || status === 403) { keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000); queueMicrotask(() => alarmHandler('key-invalid', info)); }
+  else if (status === 429) {
+    const slot = `m:${model}:${key}`;
+    const until = now + Math.min(90_000, (retryAfterMs(message) ?? 90_000) + 500);
+    if (until > (keyCooldown.get(slot) ?? 0)) keyCooldown.set(slot, until);
+  }
   if (status === 401 || status === 429) noteFailureBySecret(provider, key, status);
 }
 const maskKey = (k) => `${k.slice(0, 4)}…${k.slice(-4)}`;
@@ -142,12 +176,21 @@ async function withKeys(provider, model, send) {
   const tried = new Set();
   const start = turnOf.get(provider) ?? 0;
   turnOf.set(provider, start + 1);
+  let lastRes = null;
   for (;;) {
     const free = freeKeys(provider, model).filter((k) => !tried.has(k));
-    const key = free.length ? free[start % free.length] : (tried.size ? null : p.keys[0]);
-    if (!key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
+    // Einen schon vollen Schlüssel nicht noch einmal anrufen (auch nicht keys[0]).
+    if (!free.length) {
+      if (lastRes) return lastRes;
+      const err = new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
+      err.status = 429;
+      err.raw = 'per day';
+      throw err;
+    }
+    const key = free[start % free.length];
     tried.add(key);
     const res = await send(key);
+    lastRes = res;
     recordKey(provider, key, res);
     if (res.ok || ![401, 403, 429].includes(res.status)) return res;
     const body = await res.clone().json().catch(() => ({}));
@@ -167,7 +210,7 @@ export function keyRuntime(provider, key, now = Date.now()) {
   return {
     state: until > now ? 'full' : limited ? 'partly' : 'ok',
     until: until > now ? until : null,
-    usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits } : null,
+    usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits, tpdExhausted: !!u.tpdExhausted, rpdExhausted: !!u.rpdExhausted } : null,
     tracked: !!PROVIDERS[provider],
   };
 }
@@ -179,7 +222,7 @@ export function keyStatus() {
     label: p.label,
     env: p.env,
     keys: (p.roster ?? p.keys).map((k) => {
-      const fromPanel = keysForUser(p.name).includes(k);
+      const fromPanel = panelSecrets(p.name).includes(k);
       const r = keyRuntime(p.name, k);
       return { id: maskKey(k), source: fromPanel ? 'panel' : 'render', until: r.until, state: r.state, usage: r.usage };
     }),
@@ -393,6 +436,13 @@ const LISTERS = {
       .map((m) => makeModel('mistral', m.id, m.id.replace(/-latest$/, ''), 'Mistral'));
   },
 
+  async nvidia(p) {
+    const { data = [] } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
+    return data
+      .filter((m) => m.id && !/(embed|whisper|tts|guard|safety|jailbreak|gliner|riva|usdcode|pii|rerank)/i.test(m.id))
+      .map((m) => makeModel('nvidia', m.id, String(m.id).split('/').pop(), m.owned_by));
+  },
+
   async github(p) {
     const { data = [] } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
     return data
@@ -428,7 +478,7 @@ const DEMO_MODELS = [
   { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'ApeX Demo', icon: null, caps: ['image'] },
 ];
 
-const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5, github: 6, custom: 7 };
+const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5, github: 6, custom: 7, nvidia: 8 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
@@ -465,7 +515,8 @@ export function isBusy(id) {
   if (PROVIDERS[provider] && PROVIDERS[provider].keys.length && !freeKeys(provider, id).length) return true; // alle Schlüssel voll
   return (cooldown.get(`p:${provider}`) ?? 0) > now || (cooldown.get(id) ?? 0) > now;
 }
-const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|quota|TPD|RPD/i.test(msg);
+// „quota“ allein ist kein Tageslimit (das wäre auch ein Minuten-Fehler). TPD/RPD und „per day“ bleiben.
+const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|\bTPD\b|\bRPD\b/i.test(msg);
 // Wann ein Modell zuletzt erfolgreich geantwortet hat (für den Gesundheits-Check)
 const lastOk = new Map();
 export const noteOk = (id) => lastOk.set(id, Date.now());
@@ -688,16 +739,23 @@ const M = {
   flashLite: /^gemini:gemini-[\d.]+-flash-lite/,
   inkling: /^openrouter:thinkingmachines\/inkling:free$/,
   inklingSmall: /^openrouter:thinkingmachines\/inkling-small:free$/,
+  inkling2: /^openrouter:thinkingmachines\/inkling-2[^:]*:free$/, // z. B. inkling-2-small:free
   nemoUltra: /^openrouter:nvidia\/nemotron-3-ultra[^:]*:free$/,
   nemoVL: /^openrouter:nvidia\/nemotron-3\.5-super-vl:free$/,
   orGemma: /^openrouter:google\/gemma-4-31b[^:]*:free$/,
   northCode: /^openrouter:cohere\/north[^:]*code[^:]*:free$/,
   orFree: /^openrouter:.*:free$/,
+  hydrogen: /^gemini:gemini-4[.\d]*-hydrogen/, // Google AI Studio: gemini-4-hydrogen
+  // gemini-3.8-flash trifft auch M.flash; die Lite-Variante trifft M.flashLite
+  nvKimi: /^nvidia:.*kimi-k3(\.1)?(-pro)?$/, // moonshotai/kimi-k3.1-pro
+  nvDeepseek: /^nvidia:.*deepseek-v4(\.1)?-flash$/, // nvidia/deepseek-v4.1-flash und deepseek-ai/deepseek-v4-flash
+  nvNemo: /^nvidia:.*nemotron-3-ultra/, // nvidia/nemotron-3-ultra-550b-a55b
+  nvGlm: /^nvidia:.*glm-5\.3-flash$/, // z-ai/glm-5.3-flash
   mistral: /^mistral:/,
 };
 export const RANKING = {
   // Starke Allround-Antworten (Auto „Allgemein“, Experte, Notfall)
-  smart: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.orGemma, M.flash, M.gptoss20, M.mistral, M.orFree],
+  smart: [M.gptoss120, M.gemma31, M.inkling, M.inkling2, M.nemoUltra, M.qwen, M.orGemma, M.flash, M.gptoss20, M.mistral, M.orFree],
   // Kurze Fragen: schnell zuerst
   quick: [M.gptoss20, M.gemma26, M.flashLite, M.qwen, M.gptoss120, M.gemma31, M.inklingSmall, M.orFree],
   code: [M.gptoss120, M.qwen, M.inkling, M.nemoUltra, M.gemma31, M.northCode, M.flash, M.gptoss20, /^mistral:.*(codestral|devstral)/, M.orFree],
@@ -708,9 +766,10 @@ export const RANKING = {
   vision: [M.gemma31, M.nemoVL, M.flash, M.orGemma, M.inkling, M.mistral, M.orFree],
   // Titel, Vorschläge, Zusammenfassungen
   helper: [M.gptoss20, M.gemma26, M.flashLite, M.gemma31, M.qwen, M.gptoss120, M.orFree],
-  // ApeX (braucht Werkzeuge) und Ersatz bei vollen/zu kleinen Limits
-  agent: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.gptoss20, M.flash],
-  agentBackup: [M.qwen, M.gemma31, M.inkling, M.nemoUltra, M.gptoss20, M.flash, M.gptoss120],
+  // ApeX (braucht Werkzeuge). Groq zuerst, solange es frei ist. Danach die stärksten anderen, am Ende jedes freie OpenRouter-Modell.
+  agent: [M.gptoss120, M.hydrogen, M.nvKimi, M.nvDeepseek, M.gemma31, M.orGemma, M.nemoUltra, M.nvNemo, M.inkling, M.inkling2, M.nvGlm, M.qwen, M.gptoss20, M.flash, M.flashLite, M.nemoVL, M.orFree],
+  // Ersatz: stärkstes freies Modell zuerst. Qwen bleibt vor gpt-oss-120b, damit ein volles 120b nicht sofort wieder drankommt.
+  agentBackup: [M.hydrogen, M.nvKimi, M.nvDeepseek, M.gemma31, M.orGemma, M.nemoUltra, M.nvNemo, M.inkling2, M.inkling, M.nvGlm, M.nemoVL, M.qwen, M.flash, M.flashLite, M.gptoss20, M.gptoss120, M.orFree],
   translate: [M.gptoss120, M.gemma31, M.qwen, M.inkling, M.gptoss20, M.flash, M.orFree],
   // Bilder (Pollinations): Flux zuerst, dann andere starke, kleine Modelle zuletzt
   image: [/^pollinations:.*flux/i, /^pollinations:.*(z-image|zimage)/i, /^pollinations:.*(gpt-?image|nano|seedream|qwen-image|kontext)/i, /^pollinations:(?!.*sana)/i, /^pollinations:/i],
@@ -1037,12 +1096,12 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
 }
 
 function friendlyError(status, message = '', p) {
-  if (status === 429 && isDailyLimit(message)) return t(`Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. Wähle ein Modell von einem anderen Anbieter.`, `The free daily limit of ${p.label} is used up for today. Choose a model from another provider.`);
-  if (status === 429) return t('Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.', 'This model is busy right now. Try again in a moment or choose another model.');
+  if (status === 429 && isDailyLimit(message)) return t(`Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. ApeX versucht ein anderes Modell. Sonst geht es nach Mitternacht (UTC) wieder.`, `The free daily limit of ${p.label} is used up for today. ApeX will try another model. Otherwise it resets at midnight (UTC).`);
+  if (status === 429) return t('Dieses Modell ist gerade ausgelastet. Versuch es gleich noch einmal.', 'This model is busy right now. Try again in a moment.');
   if (status === 504) return t('Das Modell antwortet nicht mehr (Zeitüberschreitung). Versuche es noch einmal.', 'The model stopped responding (timeout). Please try again.');
   if (status === 401 || status === 403 || /api key/i.test(message)) return t(`Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`, `The key for ${p.label} was rejected. Please check ${p.env}.`);
-  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return t('Die Anfrage war zu groß für das kostenlose Limit dieses Modells. Tippe auf „Erneut versuchen“ oder wähle ein anderes Modell.', 'The request was too large for this model’s free limit. Tap “Try again” or choose another model.');
-  if (status === 404) return t('Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.', 'This model is no longer available. Please choose another one.');
+  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return t('Die Anfrage war zu groß für das kostenlose Limit dieses Modells. Tippe auf „Erneut versuchen“.', 'The request was too large for this model’s free limit. Tap “Try again”.');
+  if (status === 404) return t('Dieses Modell ist gerade nicht verfügbar. Versuch es noch einmal.', 'This model is not available right now. Please try again.');
   if (status === 400 && /context|token/i.test(message)) return t('Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.', 'The chat is too long for this model. Start a new chat.');
   return t(`Das Modell konnte nicht antworten${message ? `: ${message}` : '.'}`, `The model could not answer${message ? `: ${message}` : '.'}`);
 }

@@ -208,6 +208,7 @@ test('runAgent: Bau-Auftrag läuft im Agent-Modus, Antwort mit Seite und ohne in
   assert.doesNotMatch(out.replace(/```html[\s\S]*```/, ''), /build_website|```questions/);
   assert.ok(thinking.length > 20);
   assert.doesNotMatch(thinking, /build_website/);
+  assert.match(steps[0]?.text ?? '', /Ich lese deine Frage/);
   assert.ok(steps.some((s) => s.kind === 'plan'));
   assert.equal(work.agentMode, true);
 });

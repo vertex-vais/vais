@@ -450,7 +450,7 @@ $('#suggest-track').innerHTML = SUGGESTIONS.map((s, i) => `
     <span class="suggest-text"><b>${escapeHtml(s.title)}</b><small>${escapeHtml(s.desc)}</small></span>
   </button>`).join('');
 
-$('#suggest-track').addEventListener('click', (e) => {
+$('#suggest-track')?.addEventListener('click', (e) => {
   const card = e.target.closest('[data-suggest]');
   if (!card) return;
   el.prompt.value = SUGGESTIONS[card.dataset.suggest].prompt;
@@ -474,7 +474,7 @@ function paintIncognito() {
   $('#incognito-banner').hidden = !on;
   document.body.classList.toggle('incognito', on);
 }
-$('#incognito-btn').addEventListener('click', () => {
+$('#incognito-btn')?.addEventListener('click', () => {
   if (state.chat) return toast(t('Inkognito gilt für diesen ganzen Chat. Starte einen neuen Chat, um es zu ändern.', 'Incognito applies to this whole chat. Start a new chat to change it.'));
   state.incognito = !state.incognito;
   haptic('tap');
@@ -533,9 +533,9 @@ el.stage.addEventListener('touchend', (e) => {
     toast(t('Neuer Chat', 'New chat'));
   }
 }, { passive: true });
-$('#set-fxlogo').addEventListener('change', (e) => { fxPrefs.set('logo', e.target.checked); haptic('tap'); });
-$('#set-sky').addEventListener('change', (e) => { fxPrefs.set('sky', e.target.checked); haptic('tap'); });
-$('#set-tilt').addEventListener('change', async (e) => {
+$('#set-fxlogo')?.addEventListener('change', (e) => { fxPrefs.set('logo', e.target.checked); haptic('tap'); });
+$('#set-sky')?.addEventListener('change', (e) => { fxPrefs.set('sky', e.target.checked); haptic('tap'); });
+$('#set-tilt')?.addEventListener('change', async (e) => {
   if (e.target.checked) {
     const ok = await enableTilt(); // iPhone fragt einmal nach Erlaubnis für die Bewegungssensoren
     if (!ok) { e.target.checked = false; toast(t('Ohne Erlaubnis für Bewegung geht der 3D-Effekt nicht.', 'The 3D effect needs motion permission.')); return; }
@@ -543,9 +543,9 @@ $('#set-tilt').addEventListener('change', async (e) => {
   } else fxPrefs.set('tilt', false);
   haptic('tap');
 });
-$('#set-imgq').addEventListener('change', (e) => { try { localStorage.setItem('vais.imgq', e.target.value); } catch { /* egal */ } haptic('tap'); });
-$('#set-haptics').addEventListener('change', (e) => { try { localStorage.setItem('vais.haptics', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } if (e.target.checked) haptic('success'); });
-$('#set-swipe').addEventListener('change', (e) => { try { localStorage.setItem('vais.swipe', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } haptic('tap'); });
+$('#set-imgq')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.imgq', e.target.value); } catch { /* egal */ } haptic('tap'); });
+$('#set-haptics')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.haptics', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } if (e.target.checked) haptic('success'); });
+$('#set-swipe')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.swipe', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } haptic('tap'); });
 
 // Deine Nachricht fürs Modell: Text + Dateiinhalte, Bilder als eigene Teile
 function userContent(turn) {
@@ -1326,7 +1326,7 @@ document.addEventListener('click', async (e) => {
 
 // ── ✨ Nachricht verbessern ────────────────────────────────────────
 let improving = false;
-$('#improve-btn').addEventListener('click', async () => {
+$('#improve-btn')?.addEventListener('click', async () => {
   const before = el.prompt.value;
   if (before.trim().length < 3 || improving) return;
   improving = true;
@@ -2234,7 +2234,7 @@ const onTap = (sel, fn) => {
   node.addEventListener('pointerup', (e) => { handled = Date.now(); e.preventDefault(); fn(); });
   node.addEventListener('click', () => { if (Date.now() - handled > 600) fn(); });
 };
-$('#voice-btn').addEventListener('click', startVoice);
+$('#voice-btn')?.addEventListener('click', startVoice);
 onTap('#voice-close', stopVoice);
 onTap('#voice-end', stopVoice);
 onTap('#voice-orb', voiceTap);
@@ -2423,15 +2423,15 @@ async function trListen(btn, fromCode, toCode, side) {
   };
   try { rec.start(); tr.rec = rec; btn.classList.add('live'); btn.querySelector('small').textContent = t('hört zu …', 'listening …'); haptic('tap'); } catch { tr.rec = null; }
 }
-$('#d-translate').addEventListener('click', openTranslator);
-$('#tr-close').addEventListener('click', closeTranslator);
-$('#tr-a').addEventListener('change', trPaint);
-$('#tr-b').addEventListener('change', trPaint);
-$('#tr-swap').addEventListener('click', () => { const a = $('#tr-a').value; $('#tr-a').value = $('#tr-b').value; $('#tr-b').value = a; trPaint(); });
-$('#tr').addEventListener('pointerdown', () => onlineVoice.unlock(), { once: false, passive: true });
-$('#tr-mic-a').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-a').value, $('#tr-b').value, 'a'));
-$('#tr-mic-b').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-b').value, $('#tr-a').value, 'b'));
-$('#tr-type').addEventListener('submit', (e) => {
+$('#d-translate')?.addEventListener('click', openTranslator);
+$('#tr-close')?.addEventListener('click', closeTranslator);
+$('#tr-a')?.addEventListener('change', trPaint);
+$('#tr-b')?.addEventListener('change', trPaint);
+$('#tr-swap')?.addEventListener('click', () => { const a = $('#tr-a').value; $('#tr-a').value = $('#tr-b').value; $('#tr-b').value = a; trPaint(); });
+$('#tr')?.addEventListener('pointerdown', () => onlineVoice.unlock(), { once: false, passive: true });
+$('#tr-mic-a')?.addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-a').value, $('#tr-b').value, 'a'));
+$('#tr-mic-b')?.addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-b').value, $('#tr-a').value, 'b'));
+$('#tr-type')?.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('#tr-input').value.trim();
   if (!text || tr.busy) return;
@@ -2602,16 +2602,16 @@ function refreshPreview() {
   }
 }
 
-$('#preview').addEventListener('click', (e) => {
+$('#preview')?.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closePreview();
   const tab = e.target.closest('[data-ptab]');
   if (tab) { pv.tab = tab.dataset.ptab; pv.code = null; refreshPreview(); }
 });
-$('#preview-reload').addEventListener('click', () => {
+$('#preview-reload')?.addEventListener('click', () => {
   if (pv.tab !== 'view' || !pv.shown) return;
   showInFrame(pv.shown);
 });
-$('#preview-download').addEventListener('click', () => {
+$('#preview-download')?.addEventListener('click', () => {
   const part = websitePart(previewAnswer()?.text ?? '');
   if (!part?.code) return;
   const url = URL.createObjectURL(new Blob([part.code], { type: 'text/html' }));
@@ -2622,7 +2622,7 @@ $('#preview-download').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 });
 
-$('#expand').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#expand').hidden = true; });
+$('#expand')?.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#expand').hidden = true; });
 
 // ── Anhänge (+) ───────────────────────────────────────────────────
 const MAX_ATTACHMENTS = 4;
@@ -2723,7 +2723,7 @@ function renderTray() {
 
 // „+“: auf dem Handy Auswahl zwischen Kamera und Datei, am Computer direkt die Datei
 const attachMenu = $('#attach-menu');
-$('#attach-btn').addEventListener('click', (e) => {
+$('#attach-btn')?.addEventListener('click', (e) => {
   e.stopPropagation();
   if (!matchMedia('(pointer: coarse)').matches) return $('#attach-input').click();
   attachMenu.hidden = !attachMenu.hidden;
@@ -2741,8 +2741,8 @@ attachMenu.addEventListener('click', (e) => {
   $(opt.dataset.attach === 'camera' ? '#camera-input' : '#attach-input').click();
 });
 document.addEventListener('click', (e) => { if (!attachMenu.hidden && !attachMenu.contains(e.target)) attachMenu.hidden = true; });
-$('#camera-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
-$('#attach-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
+$('#camera-input')?.addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
+$('#attach-input')?.addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
 // Bilder einfügen (Strg+V) und per Drag & Drop
 el.prompt.addEventListener('paste', (e) => {
   const files = [...(e.clipboardData?.files ?? [])];
@@ -2791,7 +2791,7 @@ function stopAnswers() {
   chat?.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
   for (const c of state.controllers) c.abort();
 }
-$('#stop-btn').addEventListener('click', () => { stopAnswers(); haptic('tap'); });
+$('#stop-btn')?.addEventListener('click', () => { stopAnswers(); haptic('tap'); });
 el.form.addEventListener('submit', (e) => {
   e.preventDefault();
   if (busy() && (el.prompt.value.trim() || state.pending.length)) return queueMessage();
@@ -2821,7 +2821,7 @@ function toggleAccount(open) {
   avatar.setAttribute('aria-expanded', String(open));
 }
 avatar.addEventListener('click', (e) => { e.stopPropagation(); toggleAccount($('#account-menu').hidden); });
-$('#logout').addEventListener('click', async () => {
+$('#logout')?.addEventListener('click', async () => {
   await forgetOffline();
   try {
     const sub = await currentSub();
@@ -3008,15 +3008,15 @@ async function limitDelete(id) {
   $('#limit-sheet').hidden = true;
   if (el.prompt.value.trim() || state.pending.length) send();
 }
-$('#limit-list').addEventListener('click', (e) => {
+$('#limit-list')?.addEventListener('click', (e) => {
   const b = e.target.closest('[data-lim-del]');
   if (b) limitDelete(b.dataset.limDel);
 });
-$('#limit-oldest').addEventListener('click', () => {
+$('#limit-oldest')?.addEventListener('click', () => {
   const oldest = [...historyItems].filter((c) => !c.pinned).sort((a, b) => a.updated - b.updated)[0];
   if (oldest) limitDelete(oldest.id);
 });
-$('#limit-sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#limit-sheet').hidden = true; });
+$('#limit-sheet')?.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#limit-sheet').hidden = true; });
 
 // ── Seitenleiste mit Verlauf ──────────────────────────────────────
 let historyDirty = true;
@@ -3209,12 +3209,12 @@ function closeDrawer() {
   $('#open-drawer').setAttribute('aria-expanded', 'false');
 }
 
-$('#open-drawer').addEventListener('click', openDrawer);
+$('#open-drawer')?.addEventListener('click', openDrawer);
 el.dSearch.addEventListener('input', renderHistory);
-$('#d-new').addEventListener('click', () => { closeDrawer(); go(''); el.prompt.focus(); });
-$('#d-board').addEventListener('click', () => { closeDrawer(); go('#bestenliste'); });
-$('#d-stats').addEventListener('click', () => { closeDrawer(); go('#statistik'); });
-$('#d-konto').addEventListener('click', () => { closeDrawer(); go('#kontostand'); });
+$('#d-new')?.addEventListener('click', () => { closeDrawer(); go(''); el.prompt.focus(); });
+$('#d-board')?.addEventListener('click', () => { closeDrawer(); go('#bestenliste'); });
+$('#d-stats')?.addEventListener('click', () => { closeDrawer(); go('#statistik'); });
+$('#d-konto')?.addEventListener('click', () => { closeDrawer(); go('#kontostand'); });
 el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
   if (e.target.closest('[data-retry-history]')) { historyDirty = true; return openDrawer(); }
@@ -3289,7 +3289,7 @@ async function showBoard() {
         ? t('Noch keine Stimmen. Starte ein Battle, stimme ab, und die Modelle landen hier.', 'No votes yet. Start a battle, vote, and the models will show up here.')
         : t('In dieser Kategorie gibt es noch keine Stimmen.', 'There are no votes in this category yet.');
       list.innerHTML = `<li class="board-empty"><button class="btn" id="board-start">${t('Battle starten', 'Start a battle')}</button></li>`;
-      $('#board-start').addEventListener('click', () => {
+      $('#board-start')?.addEventListener('click', () => {
         state.mode = 'battle';
         store.set('vais.mode', 'battle');
         store.set('vais.modePicked', true);
@@ -3359,9 +3359,9 @@ async function openShare() {
 }
 const closeShare = () => { shareSheet.hidden = true; };
 
-$('#share-chat').addEventListener('click', openShare);
+$('#share-chat')?.addEventListener('click', openShare);
 shareSheet.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeShare(); });
-$('#share-create').addEventListener('click', async () => {
+$('#share-create')?.addEventListener('click', async () => {
   try {
     const data = await post('/api/chat/share', { chatId: state.chat.id });
     state.chat.shared = true;
@@ -3370,13 +3370,13 @@ $('#share-create').addEventListener('click', async () => {
     $('#share-link').select();
   } catch (err) { toast(err.message); }
 });
-$('#share-copy').addEventListener('click', async () => {
+$('#share-copy')?.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(shareUrl); toast(t('Link kopiert', 'Link copied')); } catch { $('#share-link').select(); }
 });
-$('#share-native').addEventListener('click', () => {
+$('#share-native')?.addEventListener('click', () => {
   navigator.share?.({ title: el.title.textContent || 'ApeX', url: shareUrl }).catch(() => {});
 });
-$('#share-stop').addEventListener('click', async () => {
+$('#share-stop')?.addEventListener('click', async () => {
   try {
     await post('/api/chat/unshare', { chatId: state.chat.id });
     state.chat.shared = false;
@@ -3385,7 +3385,7 @@ $('#share-stop').addEventListener('click', async () => {
     toast(t('Der Link funktioniert nicht mehr.', 'The link no longer works.'));
   } catch (err) { toast(err.message); }
 });
-$('#share-link').addEventListener('focus', (e) => e.target.select());
+$('#share-link')?.addEventListener('focus', (e) => e.target.select());
 
 // ── Meine Statistik ───────────────────────────────────────────────
 // Tagesbudget: ein Balken mit den Credits, die heute noch übrig sind
@@ -3512,7 +3512,7 @@ document.querySelectorAll('[data-sign]').forEach((btn) => btn.addEventListener('
     haptic('success');
   } catch (err) { toast(err.message); }
 }));
-$('#konto-set-btn').addEventListener('click', async () => {
+$('#konto-set-btn')?.addEventListener('click', async () => {
   const v = $('#konto-set-value').value.trim();
   if (!v) return $('#konto-set-value').focus();
   try {
@@ -3523,7 +3523,7 @@ $('#konto-set-btn').addEventListener('click', async () => {
     toast(t('Kontostand übernommen ✓', 'Balance applied ✓'));
   } catch (err) { toast(err.message); }
 });
-$('#konto-rows').addEventListener('click', async (e) => {
+$('#konto-rows')?.addEventListener('click', async (e) => {
   const del = e.target.closest('[data-konto-del]');
   if (!del) return;
   try { paintKonto(await post('/api/chat/ledger/delete', { id: Number(del.dataset.kontoDel) })); } catch (err) { toast(err.message); }
@@ -3536,12 +3536,13 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('ApeX wurde installiert 🎉', 'ApeX was installed 🎉')); });
 
 function paintSettings() {
-  $('#set-haptics').checked = hapticsOn();
-  $('#set-fxlogo').checked = fxPrefs.logo();
-  $('#set-sky').checked = fxPrefs.sky();
-  $('#set-tilt').checked = fxPrefs.tilt();
-  $('#set-imgq').value = imageQuality();
-  $('#set-swipe').checked = swipeOn();
+  const setProp = (sel, prop, val) => { const n = $(sel); if (n) n[prop] = val; };
+  setProp('#set-haptics', 'checked', hapticsOn());
+  setProp('#set-fxlogo', 'checked', fxPrefs.logo());
+  setProp('#set-sky', 'checked', fxPrefs.sky());
+  setProp('#set-tilt', 'checked', fxPrefs.tilt());
+  setProp('#set-imgq', 'value', imageQuality());
+  setProp('#set-swipe', 'checked', swipeOn());
   const theme = getTheme();
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
   const langSel = $('#set-lang-select');
@@ -3585,8 +3586,8 @@ function renderMemories() {
   list.innerHTML = items.map((m) => `<li><span></span><button type="button" class="mem-del" data-mem="${m.id}" aria-label="${t('Vergessen', 'Forget')}" title="${t('Vergessen', 'Forget')}">×</button></li>`).join('');
   list.querySelectorAll('li > span').forEach((sp, i) => { sp.textContent = items[i].text; });
 }
-$('#set-instr').addEventListener('input', countInstr);
-$('#set-instr-form').addEventListener('submit', async (e) => {
+$('#set-instr')?.addEventListener('input', countInstr);
+$('#set-instr-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   try {
@@ -3594,17 +3595,17 @@ $('#set-instr-form').addEventListener('submit', async (e) => {
     setMsg(form, t('Gespeichert – gilt ab der nächsten Nachricht.', 'Saved – applies from your next message.'), 'ok');
   } catch (err) { setMsg(form, err.message, 'error'); }
 });
-$('#set-memory-on').addEventListener('change', async (e) => {
+$('#set-memory-on')?.addEventListener('change', async (e) => {
   try {
     await post('/api/chat/profile', { memoryOn: e.target.checked });
     if (profileData) profileData.memoryOn = e.target.checked;
     renderMemories();
   } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
 });
-$('#set-plan-on').addEventListener('change', async (e) => {
+$('#set-plan-on')?.addEventListener('change', async (e) => {
   try { await post('/api/chat/profile', { planFirst: e.target.checked }); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
 });
-$('#set-memories').addEventListener('click', async (e) => {
+$('#set-memories')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-mem]');
   if (!btn) return;
   try {
@@ -3613,7 +3614,7 @@ $('#set-memories').addEventListener('click', async (e) => {
     renderMemories();
   } catch (err) { toast(err.message); }
 });
-$('#set-memory-clear').addEventListener('click', async () => {
+$('#set-memory-clear')?.addEventListener('click', async () => {
   if (!confirm(t('Alles vergessen, was ApeX über dich weiß?', 'Forget everything ApeX knows about you?'))) return;
   try { await post('/api/chat/profile/memory/clear', {}); profileData.memories = []; renderMemories(); } catch (err) { toast(err.message); }
 });
@@ -3664,7 +3665,7 @@ async function loadPush() {
     sp.textContent = `⏰ ${when} – ${items[i].text}`;
   });
 }
-$('#set-push-on').addEventListener('click', async () => {
+$('#set-push-on')?.addEventListener('click', async () => {
   try {
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { toast(t('Benachrichtigungen wurden nicht erlaubt.', 'Notifications were not allowed.')); return loadPush(); }
@@ -3679,10 +3680,10 @@ $('#set-push-on').addEventListener('click', async () => {
   }
   loadPush();
 });
-$('#set-push-test').addEventListener('click', async () => {
+$('#set-push-test')?.addEventListener('click', async () => {
   try { await post('/api/chat/push/test', {}); toast(t('Gesendet – gleich sollte sie erscheinen.', 'Sent – it should appear in a moment.')); } catch (err) { toast(err.message); }
 });
-$('#set-reminders').addEventListener('click', async (e) => {
+$('#set-reminders')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-rem]');
   if (!btn) return;
   try { await post('/api/chat/push/reminders/delete', { id: Number(btn.dataset.rem) }); loadPush(); } catch (err) { toast(err.message); }
@@ -3701,7 +3702,7 @@ function showSite(site) {
   siteSheet.hidden = false;
   $('#site-link').select();
 }
-$('#preview-publish').addEventListener('click', async (e) => {
+$('#preview-publish')?.addEventListener('click', async (e) => {
   const chat = state.chat;
   if (!chat || pv.turn === null) return;
   const btn = e.currentTarget;
@@ -3713,11 +3714,11 @@ $('#preview-publish').addEventListener('click', async (e) => {
   } catch (err) { toast(err.message); } finally { btn.disabled = false; }
 });
 siteSheet.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) siteSheet.hidden = true; });
-$('#site-copy').addEventListener('click', async () => {
+$('#site-copy')?.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('#site-link').value); toast(t('Link kopiert', 'Link copied')); } catch { $('#site-link').select(); }
 });
-$('#site-native').addEventListener('click', () => navigator.share?.({ title: siteNow?.title || 'ApeX', url: $('#site-link').value }).catch(() => {}));
-$('#site-stop').addEventListener('click', async () => {
+$('#site-native')?.addEventListener('click', () => navigator.share?.({ title: siteNow?.title || 'ApeX', url: $('#site-link').value }).catch(() => {}));
+$('#site-stop')?.addEventListener('click', async () => {
   if (!siteNow || !confirm(t('Webseite offline nehmen? Der Link funktioniert dann nicht mehr.', 'Take the website offline? The link will stop working.'))) return;
   try { await post('/api/chat/sites/unpublish', { id: siteNow.id }); siteSheet.hidden = true; toast(t('Offline genommen', 'Taken offline')); } catch (err) { toast(err.message); }
 });
@@ -3732,7 +3733,7 @@ async function loadSites() {
     list.querySelectorAll('li > a').forEach((a, i) => { a.textContent = `🌐 ${sites[i].title}`; });
   } catch { /* offline */ }
 }
-$('#set-sites').addEventListener('click', async (e) => {
+$('#set-sites')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-site-off]');
   if (!btn || !confirm(t('Webseite offline nehmen?', 'Take the website offline?'))) return;
   try { await post('/api/chat/sites/unpublish', { id: btn.dataset.siteOff }); loadSites(); } catch (err) { toast(err.message); }
@@ -3754,12 +3755,12 @@ async function loadDevices() {
     $('#set-devices-out').hidden = sessions.filter((x) => !x.current).length < 1;
   } catch { /* offline */ }
 }
-$('#set-devices').addEventListener('click', async (e) => {
+$('#set-devices')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-dev-out]');
   if (!btn || !confirm(t('Dieses Gerät abmelden?', 'Sign this device out?'))) return;
   try { await post('/api/auth/sessions/revoke', { id: btn.dataset.devOut }); haptic('success'); toast(t('Gerät abgemeldet.', 'Device signed out.')); loadDevices(); } catch (err) { toast(err.message); }
 });
-$('#set-devices-out').addEventListener('click', async () => {
+$('#set-devices-out')?.addEventListener('click', async () => {
   if (!confirm(t('Alle anderen Geräte abmelden? Dieses Gerät bleibt angemeldet.', 'Sign out all other devices? This device stays signed in.'))) return;
   try { await post('/api/auth/sessions/revoke', { others: true }); haptic('success'); toast(t('Alle anderen Geräte sind abgemeldet.', 'All other devices are signed out.')); loadDevices(); } catch (err) { toast(err.message); }
 });
@@ -3781,16 +3782,16 @@ function openSettings() {
 }
 function closeSettings() { settingsEl.hidden = true; }
 
-$('#open-settings').addEventListener('click', openSettings);
-$('#set-lang-select').addEventListener('change', (e) => { if (e.target.value !== LANG) setLang(e.target.value); });
-$('#d-settings').addEventListener('click', openSettings);
+$('#open-settings')?.addEventListener('click', openSettings);
+$('#set-lang-select')?.addEventListener('change', (e) => { if (e.target.value !== LANG) setLang(e.target.value); });
+$('#d-settings')?.addEventListener('click', openSettings);
 settingsEl.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeSettings();
   const th = e.target.closest('[data-theme-opt]');
   if (th) { setTheme(th.dataset.themeOpt); paintSettings(); }
 
 });
-$('#set-install').addEventListener('click', async () => {
+$('#set-install')?.addEventListener('click', async () => {
   if (!installPrompt) return;
   installPrompt.prompt();
   await installPrompt.userChoice.catch(() => {});
@@ -3805,7 +3806,7 @@ function setMsg(form, text, kind) {
   if (kind) m.classList.add(kind);
 }
 
-$('#set-password').addEventListener('submit', async (e) => {
+$('#set-password')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   const current = $('#set-current').value;
@@ -3825,7 +3826,7 @@ $('#set-password').addEventListener('submit', async (e) => {
   }
 });
 
-$('#set-clear').addEventListener('click', async () => {
+$('#set-clear')?.addEventListener('click', async () => {
   if (!confirm(t('Wirklich alle Chats löschen? Das kann nicht rückgängig gemacht werden.', 'Really delete all chats? This cannot be undone.'))) return;
   try {
     await post('/api/chat/clear', {});
@@ -3839,7 +3840,7 @@ $('#set-clear').addEventListener('click', async () => {
   }
 });
 
-$('#set-delete').addEventListener('submit', async (e) => {
+$('#set-delete')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   const password = $('#set-delete-pw').value;
@@ -3869,7 +3870,7 @@ function showNews(since = 0) {
     sheet.querySelector('.sheet-backdrop').onclick = close;
   });
 }
-$('#set-news').addEventListener('click', () => { closeSettings(); showNews(0); });
+$('#set-news')?.addEventListener('click', () => { closeSettings(); showNews(0); });
 
 // ── Mitteilungen vom Admin (einmal anzeigen, dann als gelesen merken) ──
 async function showAnnouncements() {
@@ -3955,7 +3956,7 @@ async function init() {
   const staff = !!(user.admin || user.mod);
   $('#d-team').hidden = !staff;
   if (staff) {
-    $('#d-team').addEventListener('click', () => { closeDrawer(); openTeam(null, { toast }); });
+    $('#d-team')?.addEventListener('click', () => { closeDrawer(); openTeam(null, { toast }); });
     refreshTeamBadge();
     if (location.hash.startsWith('#g/')) openTeam(decodeURIComponent(location.hash.slice(3)), { toast });
   }
@@ -4064,7 +4065,7 @@ function showWelcome() {
   }));
 }
 
-$('#set-tour').addEventListener('click', () => {
+$('#set-tour')?.addEventListener('click', () => {
   closeSettings();
   go('');
   setTimeout(startTour, 350);

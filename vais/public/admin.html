@@ -167,7 +167,11 @@
 
     <section class="adm-card" data-admin-only id="provider-keys-card">
       <h2>API-Keys</h2>
-      <p class="adm-sub" data-en="All keys of all providers in one place. Saved keys are stored encrypted and only the last 4 characters are shown. Enabled saved keys are used in turn and take priority; keys from Render (environment variables) are only the fallback. A full or rejected key is skipped until it is free again. NVIDIA’s free tier is admin-only and is never used for normal users.">Alle Schlüssel aller Anbieter an einem Ort. Gespeicherte Schlüssel liegen verschlüsselt, angezeigt werden nur die letzten 4 Zeichen. Aktivierte gespeicherte Schlüssel werden reihum benutzt und haben Vorrang, Schlüssel aus Render (Umgebungsvariablen) sind nur der Ersatz. Ein voller oder abgelehnter Schlüssel wird übersprungen, bis er wieder frei ist. NVIDIA (kostenloses Kontingent) ist nur für Admins und wird nie für normale Nutzer verwendet.</p>
+      <p class="adm-sub" data-en="All keys of all providers in one place. Saved keys are stored encrypted and only the last 4 characters are shown. Enabled saved keys are used in turn and take priority; keys from Render (environment variables) are only the fallback. A full or rejected key is skipped until it is free again. NVIDIA’s free tier stays admin-only for normal requests. The switch “NVIDIA as a backup” (on by default) lets ApeX use that key only when other providers are full.">Alle Schlüssel aller Anbieter an einem Ort. Gespeicherte Schlüssel liegen verschlüsselt, angezeigt werden nur die letzten 4 Zeichen. Aktivierte gespeicherte Schlüssel werden reihum benutzt und haben Vorrang, Schlüssel aus Render (Umgebungsvariablen) sind nur der Ersatz. Ein voller oder abgelehnter Schlüssel wird übersprungen, bis er wieder frei ist. NVIDIA (kostenloses Kontingent) bleibt für normale Anfragen nur für Admins. Der Schalter „NVIDIA als Ersatz“ (Standard an) erlaubt ApeX den Schlüssel nur, wenn andere Anbieter voll sind.</p>
+      <label class="adm-switch">
+        <span><b data-en="NVIDIA as a backup">NVIDIA als Ersatz</b><small data-en="When other providers are full, ApeX may use the NVIDIA key for normal users too. Off = admins only, as before. Everywhere else the key stays admin-only.">Wenn andere Anbieter voll sind, darf ApeX den NVIDIA-Schlüssel auch für normale Nutzer nutzen. Aus = nur Admins, wie bisher. Für alles andere bleibt der Schlüssel admin-only.</small></span>
+        <input type="checkbox" id="nvidia-fallback" role="switch" checked>
+      </label>
       <p class="adm-hint" id="pk-warn" hidden data-en="KEY_ENCRYPTION_SECRET is not set on the server. Set it before saving keys here.">KEY_ENCRYPTION_SECRET ist auf dem Server nicht gesetzt. Bitte setzen, bevor hier Schlüssel gespeichert werden.</p>
       <div id="pk-keys"></div>
       <form class="adm-form adm-provider-form" id="pk-form" novalidate>
@@ -181,7 +185,7 @@
         </div>
       </form>
       <p class="adm-hint" data-en="The key is tested before it is saved.">Der Schlüssel wird vor dem Speichern getestet.</p>
-      <p class="adm-hint" id="pk-nvidia" hidden data-en="NVIDIA’s free tier forbids production use. These keys are never used for normal users’ requests.">Das kostenlose NVIDIA-Kontingent verbietet den Produktiveinsatz. Diese Schlüssel werden nie für Anfragen normaler Nutzer benutzt.</p>
+      <p class="adm-hint" id="pk-nvidia" hidden data-en="NVIDIA’s free tier is meant as a backup, not as the main model. The switch above decides whether normal users get it when other providers are full.">Das kostenlose NVIDIA-Kontingent ist als Ersatz gedacht, nicht als Hauptmodell. Der Schalter oben entscheidet, ob normale Nutzer es bekommen, wenn andere Anbieter voll sind.</p>
     </section>
 
     <section class="adm-card" data-admin-only>

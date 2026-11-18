@@ -4,8 +4,9 @@
 // und haben Vorrang. Umgebungsvariablen (z. B. GROQ_API_KEY) sind nur der Ersatz, wenn kein
 // gespeicherter Schlüssel frei ist. 401 und 429 setzen eine Pause.
 //
-// NVIDIA (kostenloses Kontingent auf build.nvidia.com) ist adminOnly: diese Schlüssel dürfen
-// nie für Anfragen normaler Nutzer verwendet werden. getActiveProviderKey liefert sie nur mit { admin: true }.
+// NVIDIA (kostenloses Kontingent auf build.nvidia.com) bleibt adminOnly: getActiveProviderKey
+// und keysForUser liefern die Schlüssel ohne { admin: true } nie. Ausnahme nur der ApeX-Ersatz,
+// wenn die Einstellung nvidia_fallback an ist (Standard: an). Aus = wieder nur für Admins.
 //
 // Verschlüsselung: KEY_ENCRYPTION_SECRET (langer Zufallswert). Fehlt sie, wird aus einem vorhandenen
 // Server-Geheimnis abgeleitet (DATABASE_TOKEN, sonst SMTP_PASS, sonst BREVO_API_KEY, sonst
@@ -185,10 +186,25 @@ export function cachedKeys(provider) {
   return plainCache.get(provider) ?? [];
 }
 
-// Schlüssel, die für normale Nutzer benutzt werden dürfen. adminOnly (NVIDIA) ist immer leer.
+// Schlüssel, die für normale Nutzer benutzt werden dürfen. adminOnly (NVIDIA) ist hier immer leer.
+// Der ApeX-Ersatz liest NVIDIA separat über nvidiaFallbackOn() in models.js – nicht über diese Funktion.
 export function keysForUser(provider) {
   if (isAdminOnlyProvider(provider)) return [];
   return cachedKeys(provider).map((k) => k.key);
+}
+
+// NVIDIA als Ersatz für normale Nutzer, wenn andere Anbieter voll sind. Standard an.
+// adminOnly selbst bleibt: getActiveProviderKey('nvidia') ohne { admin: true } liefert weiter null.
+let nvidiaFallback = true;
+export function nvidiaFallbackOn() { return nvidiaFallback; }
+export async function loadNvidiaFallback() {
+  try { nvidiaFallback = (await getSetting('nvidia_fallback', 'on')) !== 'off'; } catch { nvidiaFallback = true; }
+  return nvidiaFallback;
+}
+export async function setNvidiaFallback(on) {
+  nvidiaFallback = !!on;
+  await setSetting('nvidia_fallback', on ? 'on' : 'off');
+  return nvidiaFallback;
 }
 
 function endpointOf(raw) {
@@ -441,6 +457,7 @@ export async function migrateLegacy() {
 
 try { await migrateLegacy(); } catch (err) { console.error('API-Keys übernehmen fehlgeschlagen:', err.message); }
 await refreshKeyCache();
+await loadNvidiaFallback();
 
 // Ein Schlüssel ohne Speichern testen (für „vor dem Speichern testen“). Liefert nie den Schlüssel zurück.
 export async function testPlainKey({ provider, key, baseUrl } = {}, fetchImpl = globalThis.fetch) {
@@ -501,7 +518,7 @@ export async function listUnifiedKeys(runtime = () => ({})) {
     });
     return { ...p, keys: [...saved, ...env] };
   });
-  return { providers, keys: flat, encryption: encryptionSource() };
+  return { providers, keys: flat, encryption: encryptionSource(), nvidiaFallback: nvidiaFallbackOn() };
 }
 
 // Cursor-Aliase, damit bestehende Aufrufe gleich bleiben.
