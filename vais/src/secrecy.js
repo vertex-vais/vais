@@ -81,7 +81,17 @@ export function plainQuestions(text) {
 }
 
 export function scrubAnswer(text, opts = {}) {
-  return scrubSelfReveal(scrubToolNames(plainQuestions(text)), opts);
+  return stripUngrounded(scrubSelfReveal(scrubToolNames(plainQuestions(text)), opts), opts);
+}
+// Denk-Notizen gehören nicht in die sichtbare Antwort. Zitate [n] nur, wenn wirklich Quellen da sind.
+export function stripUngrounded(text, { sources = false } = {}) {
+  let s = String(text ?? '');
+  s = s.replace(/(^|\n)\s*(Der Nutzer möchte|The user wants|Ich werde (jetzt|eine|jetzt eine)|Ich plane|Lass mich|Let me|I will now)[^\n]*/gi, '$1');
+  if (!sources) {
+    s = s.replace(/[ \t]*\[\d+\]/g, '');
+    s = s.replace(/(^|\n)\s*(Nach der Suche|Laut (der )?Suche|After the search|According to the search)[^\n]*/gi, '$1');
+  }
+  return s.replace(/\n{3,}/g, '\n\n').trim();
 }
 // Gedanken (für den Nutzer aufklappbar): Werkzeug-Namen und Selbstauskünfte zu Modellen neutralisieren
 export function scrubThoughts(text) {

@@ -572,7 +572,7 @@ chat.post('/stream', wrap(async (req, res) => {
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
           onFallback: ({ from, to, message }) => {
             logEvent('fallback', from?.id ?? model, message);
-            fallback = { id: to.id, name: to.name, maker: to.maker, icon: to.icon };
+            fallback = { id: to.id, name: to.name, maker: to.maker, icon: to.icon, message: String(message || '').slice(0, 240) };
             out(`${JSON.stringify({ fallback })}\n`);
           },
           work,
@@ -583,9 +583,10 @@ chat.post('/stream', wrap(async (req, res) => {
             const job = launchJob({
               userId: req.user.id,
               chatId: row.id,
+              turn: turnNo,
               title: spec.title,
               run: spec.run,
-              onDone: (done) => appendJobMessage(row.id, done),
+              onDone: (done) => saveJobOnTurn(row.id, turnNo, done),
             });
             out(`${JSON.stringify({ job })}\n`);
           },
@@ -798,20 +799,16 @@ chat.get('/jobs', wrap(async (req, res) => {
   res.json({ jobs: jobsFor(req.user.id, chatId) });
 }));
 
-async function appendJobMessage(chatId, job) {
-  const row = await get('SELECT COALESCE(MAX(turn), -1) AS t FROM messages WHERE chat_id = ?', chatId);
-  const turn = Number(row?.t ?? -1) + 1;
-  const now = Date.now();
-  const text = String(job.text || job.error || '').slice(0, 1_500_000);
-  await run(
-    'INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    chatId, turn, -1, '', 'done', null, null, now,
-  );
-  await run(
-    'INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    chatId, turn, 0, text, job.status === 'error' ? 'error' : 'done', job.status === 'error' ? text : null, JSON.stringify({ jobId: job.id }), now,
-  );
-  await run('UPDATE chats SET updated_at = ? WHERE id = ?', now, chatId);
+async function saveJobOnTurn(chatId, turn, job) {
+  if (turn === null || turn === undefined) return;
+  const row = await get('SELECT meta FROM messages WHERE chat_id = ? AND turn = ? AND side = 0', chatId, turn);
+  let meta = {};
+  try { meta = JSON.parse(row?.meta || '{}'); } catch { meta = {}; }
+  meta.job = {
+    id: job.id, status: job.status, title: job.title, engine: job.engine, url: job.url, note: job.note,
+    detail: job.detail, startedAt: job.startedAt, text: job.text, error: job.error,
+  };
+  await run('UPDATE messages SET meta = ? WHERE chat_id = ? AND turn = ? AND side = 0', JSON.stringify(meta), chatId, turn, 0);
 }
 
 // Anheften und Ordner
@@ -1226,6 +1223,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, waitMs: meta.waitMs ?? 0, thinkSummary: forShare ? null : meta.thinkSummary ?? null,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
         reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq, cost: Number(meta.cost) || 0,
+        job: meta.job || null,
       };
       if (meta.jobId) turns[m.turn].jobId = meta.jobId;
     }

@@ -30,6 +30,8 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 const { runAgent, fitToolText, shouldRetrySameModel } = await import('../src/agent.js');
+const { stripUngrounded } = await import('../src/secrecy.js');
+const { dateProblems, fixPageDates } = await import('../src/sitebuilder.js');
 
 async function ask(text) {
   calls.length = 0;
@@ -40,7 +42,7 @@ async function ask(text) {
     onStep: () => {},
     personal: {},
   });
-  return { out, first: calls[0] };
+  return { out, first: calls[0], last: calls.at(-1) };
 }
 
 test('Kurze Sachfrage: schnelles Modell, kein Werkzeug, kaum Denken, keine Modellliste', async () => {
@@ -51,13 +53,31 @@ test('Kurze Sachfrage: schnelles Modell, kein Werkzeug, kaum Denken, keine Model
   console.log(`ApeX Messung kurze Frage: ${ms} ms bis zur Antwort (Mock)`);
   assert.ok(ms < 1500, `zu langsam: ${ms} ms`);
   assert.match(out, /Canberra/);
-  assert.equal(first.model, 'openai/gpt-oss-20b');
+  assert.equal(first.model, 'llama-3.1-8b-instant');
   assert.equal(first.stream, true);
-  assert.equal(first.reasoning_effort, 'low');
+  assert.equal(first.reasoning_effort, undefined);
   assert.equal(first.tools, undefined);
   assert.equal(modelLists, 0);
   assert.match(first.messages[0].content, /Kein Vorspann/);
   assert.match(first.messages[0].content, /Keine Schlussfrage/);
+});
+
+test('Erfundene Suche und Denk-Notizen bleiben unsichtbar', () => {
+  const raw = 'Der Nutzer möchte das Wetter.\nIch werde jetzt eine Suche starten.\nNach der Suche: sonnig [1]';
+  const out = stripUngrounded(raw, { sources: false });
+  assert.doesNotMatch(out, /Der Nutzer möchte|Ich werde jetzt|Nach der Suche|\[1\]/);
+});
+
+test('Countdown-Widerspruch und altes Silvester-Jahr werden erkannt und vereinheitlicht', () => {
+  const html = '<p>SILVESTER 2025</p><b>364 Tage</b><b>43 Tage</b>';
+  assert.ok(dateProblems(html, new Date('2026-11-18')).length >= 2);
+  const fixed = fixPageDates(html, new Date('2026-11-18'));
+  assert.match(fixed, /2026/);
+  assert.match(fixed, /data-countdown/);
+  assert.doesNotMatch(fixed, /364 Tage|43 Tage/);
+  const icons = fixPageDates('<i class="fas fa-star"></i><div class="icon" style="background:#f5c518"></div><p>SILVESTER 2026</p>');
+  assert.match(icons, /<svg class="icon"/);
+  assert.doesNotMatch(icons, /fa-star|font-awesome|#f5c518/);
 });
 
 test('Suchtext wird auf ein Groq-Budget gekürzt, ein Tageslimit wechselt das Modell', () => {
@@ -83,9 +103,8 @@ test('Bau-Auftrag blockiert den Chat nicht und startet einen Hintergrundjob', as
   assert.match(started, /Webseite/);
 });
 
-test('Wettersuche: großes Modell mit Werkzeugen, ohne Stream-Abbruch', async () => {
-  const { first } = await ask('Wetter Berlin heute');
-  assert.equal(first.model, 'openai/gpt-oss-120b');
-  assert.equal(first.stream, false);
-  assert.ok(first.tools?.some((tool) => tool.function?.name === 'web_search'));
+test('Wettersuche sucht selbst und schreibt mit einem schnellen Modell, nicht mit gpt-oss-120b', async () => {
+  const { last } = await ask('Wetter Berlin heute');
+  assert.notEqual(last?.model, 'openai/gpt-oss-120b');
+  assert.equal(last?.tools, undefined);
 });

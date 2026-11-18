@@ -314,18 +314,26 @@ export async function runBuildTask({ question, history = [], task, user = null, 
   // Bauen: Programmier-Agent, wenn eingerichtet und frei – sonst (oder bei Problemen) der eigene Baukasten
   let html = '';
   let viaAgent = false;
+  let outAgent = '';
+  let cursorNote = '';
   const agentOk = user ? await deps.cursorAvailable(user).catch((err) => ({ ok: false, reason: err.message })) : { ok: false, reason: 'nouser' };
-  console.log(`ApeX Bau: Cursor ${agentOk.ok ? 'ja' : `nein (${agentOk.reason ?? '?'})`}`);
+  cursorNote = agentOk.ok ? '' : (agentOk.reason || 'nicht verfügbar');
+  console.log(`ApeX Bau: Cursor ${agentOk.ok ? 'ja' : `nein (${cursorNote})`}`);
   if (agentOk.ok) {
     onStep({ kind: 'agent', text: 'Programmier-Agent übernimmt den Bau' });
     try {
       const out = await deps.cursorBuild({ user, topic: p.topic || p.title, brief: `${brief}\n\nZUSATZREGELN:\n${rules}`, signal, onStep });
       html = out.html;
       viaAgent = true;
+      outAgent = out.agentId || '';
     } catch (err) {
       if (signal?.aborted) throw err;
-      console.error('Programmier-Agent nicht verfügbar, eigener Baukasten:', agentOk.reason ?? '', err.status ?? '', err.message);
-      onStep({ kind: 'other', text: 'Wechsle zum eigenen Baukasten' });
+      const raw = err.message || 'Fehler';
+      cursorNote = /no-repo|not enabled/i.test(raw)
+        ? 'Cursor-Konto erlaubt keine Agenten ohne Repository (403). ApeX-Baukasten übernimmt – absichtlich kein VERTEX-Repo.'
+        : raw;
+      console.error('Programmier-Agent nicht verfügbar, eigener Baukasten:', err.status ?? '', raw);
+      onStep({ kind: 'other', text: 'ApeX-Baukasten', engine: 'builder', note: cursorNote });
     }
   }
   if (!html) {
@@ -371,5 +379,5 @@ export async function runBuildTask({ question, history = [], task, user = null, 
     p.assumptions.length ? `**Meine Annahmen:** ${p.assumptions.slice(0, 4).join(' · ')}` : '',
     p.openQuestions.length ? p.openQuestions.join(' ') : '',
   ].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && i > 0));
-  return { html, text: lines.join('\n').trim(), viaAgent, revisions, plan: p, score: lastReview?.score ?? null };
+  return { html, text: lines.join('\n').trim(), viaAgent, revisions, plan: p, score: lastReview?.score ?? null, agentId: outAgent, cursorNote };
 }

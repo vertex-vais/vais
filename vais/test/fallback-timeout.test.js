@@ -75,7 +75,7 @@ test('Groq-Timeout bei „Hallo“ nimmt Gemini Flash, nie Kimi', async () => {
     personal: {},
   });
   assert.match(out, /Hallo/);
-  assert.equal(calls[0].model, 'openai/gpt-oss-20b');
+  assert.equal(calls[0].model, 'llama-3.1-8b-instant');
   assert.equal(calls[0].stream, true);
   assert.ok(calls.some((c) => c.model === 'gemini-3-flash'), calls.map((c) => c.model).join(','));
   assert.ok(!calls.some((c) => /kimi/i.test(c.model)));

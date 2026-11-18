@@ -533,8 +533,23 @@ function markFailed(id, status, message) {
   else if (status === 404) cooldown.set(id, now + 60 * 60 * 1000);
   else cooldown.set(id, now + 60 * 1000);
 }
+const providerErrors = [];
+export function noteProviderError({ provider, model, status, message, tokens }) {
+  providerErrors.push({
+    at: Date.now(),
+    provider: String(provider || model || '').split(':')[0],
+    model: String(model || ''),
+    status: status ?? null,
+    message: String(message || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+    tokens: Number.isFinite(tokens) ? tokens : null,
+  });
+  if (providerErrors.length > 50) providerErrors.shift();
+}
+export function recentProviderErrors() { return [...providerErrors].reverse(); }
+
 function fail(model, status, message, p) {
   markFailed(model, status, message);
+  noteProviderError({ provider: p?.name || String(model).split(':')[0], model, status, message });
   return Object.assign(new Error(friendlyError(status, message, p)), { status, retryAfter: status === 429 && !isDailyLimit(message) ? retryAfterMs(message) : null, raw: message });
 }
 
@@ -792,10 +807,25 @@ export function rankModels(task, models, { cap = null, includeBusy = false, excl
 }
 // Das beste freie Modell für eine Aufgabe (oder null)
 // Kurzer Smalltalk, ohne die Modellliste aus dem Netz zu holen (die kostet beim Aufwachen mehrere Sekunden).
-export function quickGroqModel() {
-  if (!PROVIDERS.groq?.keys?.length) return null;
-  return { id: 'groq:openai/gpt-oss-20b', name: 'gpt-oss-20b', provider: 'groq', upstream: 'openai/gpt-oss-20b', maker: 'OpenAI', icon: 'openai', caps: ['text', 'code'] };
+function groqStub(upstream, name) {
+  return { id: `groq:${upstream}`, name, provider: 'groq', upstream, maker: name.startsWith('llama') ? 'Meta' : 'OpenAI', icon: name.startsWith('llama') ? 'meta-color' : 'openai', caps: ['text', 'code'] };
 }
+// talk: kein Denker. search: mehr Tokens pro Minute als gpt-oss, ebenfalls ohne langes Nachdenken.
+const GROQ_PREFER = {
+  talk: [/llama-3\.1-8b-instant$/, /llama-3\.3-70b-versatile$/, /gpt-oss-20b$/],
+  search: [/llama-3\.3-70b-versatile$/, /llama-3\.1-8b-instant$/, /gpt-oss-20b$/],
+};
+export function preferredGroq(kind = 'talk') {
+  const list = (cache.groq?.list ?? []).filter((m) => !isBusy(m.id));
+  for (const re of GROQ_PREFER[kind] ?? GROQ_PREFER.talk) {
+    const hit = list.find((m) => re.test(String(m.upstream)) || re.test(String(m.id)));
+    if (hit) return hit;
+  }
+  if (!PROVIDERS.groq?.keys?.length) return null;
+  const upstream = kind === 'search' ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+  return groqStub(upstream, upstream);
+}
+export function quickGroqModel() { return preferredGroq('talk'); }
 
 export async function pickRanked(task, opts = {}) {
   return rankModels(task, await listModels(), opts)[0] ?? null;

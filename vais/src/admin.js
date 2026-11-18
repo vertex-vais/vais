@@ -7,7 +7,7 @@ import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { isAdmin, isStaff, inTestMode, isUnlimited, ADMIN_EMAILS } from './config.js';
 import { notifyUser } from './push.js';
-import { describeModel, listModels, demoMode, keyRuntime, forgetModelCache } from './models.js';
+import { describeModel, listModels, demoMode, keyRuntime, forgetModelCache, recentProviderErrors } from './models.js';
 import { limitSettings, saveLimitSettings, LIMIT_FIELDS, costSettings, saveCostSettings, COST_FIELDS, usageMap, resetUsage, scaled } from './limits.js';
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
@@ -47,6 +47,10 @@ const adminOnly = (req, res, next) => (req.isAdmin ? next() : next(new HttpError
 
 const DAY = 24 * 3600 * 1000;
 const n = (row, key = 'n') => Number(row?.[key] ?? 0);
+
+admin.get('/provider-errors', adminOnly, wrap(async (req, res) => {
+  res.json({ errors: recentProviderErrors() });
+}));
 
 admin.get('/overview', wrap(async (req, res) => {
   const now = Date.now();

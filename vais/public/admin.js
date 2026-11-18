@@ -74,6 +74,15 @@ function drawHistory() {
   if (pie) pie.classList.add('adm-pie');
   $('#modes').replaceChildren(...(pie ? [pie] : []));
 }
+async function loadErrors() {
+  const list = $('#err-list');
+  if (!list) return;
+  try {
+    const data = await api('provider-errors');
+    const rows = data.errors || [];
+    list.innerHTML = rows.length ? rows.map((e) => `<li><b>${esc(e.provider)} · ${esc(e.model)}</b><small>${esc(when(e.at))} · HTTP ${esc(e.status ?? '–')}${e.tokens ? ` · ~${esc(e.tokens)} Tokens` : ''}</small><p>${esc(e.message)}</p></li>`).join('') : `<li><p>${esc(t('Noch keine Anbieter-Fehler in diesem Lauf.', 'No provider errors in this run yet.'))}</p></li>`;
+  } catch { /* egal */ }
+}
 async function loadStats() {
   try {
     dash.data = await api(`stats?days=${dash.days}`);
@@ -291,6 +300,7 @@ async function load() {
     tiles(d.counts);
     models(d.models, d.modes);
     loadStats();
+    if (role === 'admin') loadErrors();
     loadReports();
     loadFaq();
     lastServer = d.server;
