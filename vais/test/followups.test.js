@@ -18,7 +18,6 @@ test('Fertige Ideen aus Nutzersicht bleiben erhalten', () => {
   ]), [
     'Gib ihm einen roten Anzug',
     'Stell ihn in eine verregnete Großstadt',
-    'Mach daraus ein Anime-Bild',
   ]);
   assert.deepEqual(cleanSuggestions([
     'Erklär das einfacher',
@@ -27,7 +26,6 @@ test('Fertige Ideen aus Nutzersicht bleiben erhalten', () => {
   ]), [
     'Erklär das einfacher',
     'Gib mir ein Beispiel mit Code',
-    'Fasse es in 3 Punkten zusammen',
   ]);
 });
 
@@ -46,7 +44,7 @@ test('Fragezeichen und Anrede werden verworfen, Bitten umgeschrieben', () => {
   assert.equal(isBadSuggestion('Gib mir ein Beispiel mit Code'), false);
 });
 
-test('Mischt saubere Ideen mit Fragen und begrenzt auf drei kurze Vorschläge', () => {
+test('Mischt saubere Ideen mit Fragen und begrenzt auf zwei kurze Vorschläge', () => {
   assert.deepEqual(cleanSuggestions([
     'Welche Kleidung soll er tragen?',
     'Gib ihm einen roten Anzug',
@@ -57,7 +55,6 @@ test('Mischt saubere Ideen mit Fragen und begrenzt auf drei kurze Vorschläge', 
   ]), [
     'Gib ihm einen roten Anzug',
     'Stell ihn in eine verregnete Großstadt',
-    'Mach daraus ein Anime-Bild',
   ]);
   const long = cleanSuggestions(['Gib mir ein ausführliches Beispiel mit TypeScript und Tests dazu bitte wirklich']);
   assert.equal(long.length, 1);

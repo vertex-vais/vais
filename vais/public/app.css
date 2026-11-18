@@ -922,7 +922,11 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 .work-extra[hidden] { display: none; }
 .work-extra { padding: 4px 0 2px 4px; }
 .work-meta { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
-.job-card { display: flex; align-items: center; gap: 8px; margin: 4px 0 18px; color: var(--muted); font-size: 14px; }
+.job-card { display: flex; align-items: center; gap: 10px; margin: 8px 0 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); font-size: 14px; }
+.job-card small { display: block; color: var(--muted); margin-top: 2px; }
+.job-card.done { border-color: var(--border); }
+.job-card .job-open, .job-card a { color: var(--text); }
+.job-frame { width: 100%; height: 70vh; border: 0; border-radius: 12px; background: #fff; }
 .card-foot { display: flex; gap: 2px; margin: 10px 0 0 -8px; }
 .card-foot .card-btn { color: var(--muted); }
 .card-foot .card-btn:hover { color: var(--text); }

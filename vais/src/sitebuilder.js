@@ -76,7 +76,8 @@ export function __setAsk(fn) { ask = fn ?? askLimited; }
 const QUALITY = `QUALITÄT (sehr wichtig):
 - Echte Inhalte: Nutze NUR Fakten und Angaben aus dem Auftrag. Erfinde NIEMALS: Kundenstimmen/Bewertungen, Namen von Personen oder Firmen, Preise, Telefonnummern, E-Mail-Adressen, Adressen, Statistiken/Zahlen, Auszeichnungen, Logos bekannter Firmen. Kein „Lorem ipsum“, kein example.com, kein „Max Mustermann“, keine „Firma XY“.
 - Fehlt eine Angabe, schreibe ehrliche, sinnvolle Texte zum Thema (was der Bereich bietet, warum er nützlich ist) statt erfundener Details. Kontaktformulare schicken nichts ab, sondern zeigen eine freundliche Bestätigung; mailto/tel nur, wenn im Auftrag eine echte Adresse/Nummer steht.
-- Bilder: KEINE zufälligen Stockfotos (kein picsum, unsplash, placeholder, placehold). Stattdessen eigene Inline-SVG-Illustrationen und -Icons, CSS-Formen/Verläufe, Emojis – oder echte Bild-Links aus dem Auftrag.
+- Bilder: KEINE zufälligen Stockfotos (kein picsum, unsplash, placeholder, placehold). Icons NUR als Inline-SVG mit <path>, niemals als Icon-Schrift (kein Font Awesome, keine Material Icons, keine leeren gelben Quadrate).
+- Datum: Heute steht im Auftrag. Countdown und Jahreszahl nur daraus, per JavaScript (data-countdown, data-year). Nie eine feste Tageszahl und nie ein vergangenes Silvester-Jahr.
 - Gestaltung wie von einer Top-Agentur: klare Hierarchie, großzügige Abstände, starke Überschriften, durchdachte Farben, einheitliche Rundungen und Schatten, Hover- und Fokus-Zustände, weiche Übergänge, dezente Animationen beim Scrollen.
 - Mobil zuerst: muss bei 360 px Breite perfekt aussehen (keine waagerechte Scrollleiste), auf großen Bildschirmen mehrspaltig.
 - Barrierearm: guter Kontrast, alt-Texte, aria-label für Icon-Knöpfe, echte <button> für Aktionen, sichtbarer Fokus, prefers-reduced-motion beachten.
@@ -305,9 +306,40 @@ async function repair(spec, parts, ids, { signal, onStep, validate }) {
 const lineCount = (s) => s.split('\n').length;
 
 // ── Öffentlich: neue Seite bauen ─────────────────────────────────────
+const INLINE_ICON = '<svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.2 14.7 9l6.3.6-4.8 4.1 1.5 6.1L12 16.8 6.3 19.8l1.5-6.1L3 9.6 9.3 9z"/></svg>';
+export function replaceIconFonts(html) {
+  let out = String(html ?? '');
+  out = out.replace(/<link\b[^>]*(?:font-awesome|fontawesome|material-icons|material\+icons|fonts\.googleapis\.com\/icon)[^>]*>/gi, '');
+  out = out.replace(/<(?:i|span)\b[^>]*class=["'][^"']*(?:\bfa[srlb]?\b|material-icons|material-symbols)[^"']*["'][^>]*>[\s\S]*?<\/(?:i|span)>/gi, INLINE_ICON);
+  out = out.replace(/<(span|div|i)\b[^>]*class=["'][^"']*\bicon\b[^"']*["'][^>]*>\s*<\/\1>/gi, INLINE_ICON);
+  return out;
+}
+export function dateProblems(html, now = new Date()) {
+  const year = now.getFullYear();
+  const src = String(html ?? '');
+  const problems = [];
+  const old = src.match(/(Silvester|Neujahr|New Year)\s+(20\d\d)/i);
+  if (old && Number(old[2]) !== year) problems.push(`Altes Jahr ${old[2]} – heute ist ${year}.`);
+  const days = [...src.matchAll(/(\d{2,4})\s*Tage/gi)].map((m) => Number(m[1]));
+  const uniq = [...new Set(days)];
+  if (uniq.length > 1) problems.push(`Widersprüchliche Countdown-Zahlen: ${uniq.join(' und ')} Tage.`);
+  if (/font-awesome|material-icons|class=["'][^"']*\bfa[srlb]?\b/i.test(src)) problems.push('Icon-Schrift statt Inline-SVG.');
+  return problems;
+}
+export function fixPageDates(html, now = new Date()) {
+  const year = now.getFullYear();
+  let out = replaceIconFonts(String(html ?? ''));
+  if (!dateProblems(out, now).some((p) => /Jahr|Countdown/.test(p))) return out;
+  out = out.replace(/(Silvester|Neujahr|New Year)(\s+)(20\d\d)/gi, (_, w, sp, y) => (Number(y) === year ? `${w}${sp}${y}` : `${w}${sp}${year}`));
+  out = out.replace(/>(\d{2,4})\s*Tage</gi, '><span data-countdown></span><');
+  const script = `<script>(function(){var y=new Date().getFullYear();document.querySelectorAll('[data-year]').forEach(function(n){n.textContent=y});var end=new Date(y,11,31,23,59,59);if(end<new Date())end.setFullYear(y+1);var d=Math.max(0,Math.ceil((end-new Date())/86400000));document.querySelectorAll('[data-countdown]').forEach(function(n){n.textContent=d+' Tage'});})();</script>`;
+  return /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${script}</body>`) : `${out}${script}`;
+}
 export async function buildWebsite({ brief, kind = 'website', signal, onStep = () => {}, validate, rules = '', effort = 'low' }) {
   const k = ['website', 'app', 'game'].includes(kind) ? kind : 'website';
-  const text = String(brief ?? '').slice(0, 9000);
+  const year = new Date().getFullYear();
+  const today = new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const text = `HEUTE: ${today}. Das Jahr ist ${year}. Silvester ist der 31. Dezember ${year}. Ein Countdown darf nur eine Zahl haben und muss per JavaScript aus diesem Datum kommen (Element data-countdown), nie als festes „364 Tage“.\n\n${String(brief ?? '').slice(0, 8500)}`;
   onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
   const spec = await architect(text, k, { signal, rules });
   spec.brief = text;
@@ -346,8 +378,9 @@ export async function buildWebsite({ brief, kind = 'website', signal, onStep = (
   if (!base?.css) base = DEFAULT_BASE;
   onStep({ kind: 'check', text: 'Webseite prüfen' });
   await repair(spec, parts, spec.sections.map((s) => s.id), { signal, onStep, validate });
-  const html = assemble(spec, base, parts);
-  return { html, report: summary(spec, html, validate) + (missing.length ? `\nNicht fertig geworden (Limit): ${missing.join(', ')} – biete an, sie mit edit_website nachzubauen.` : '') };
+  const html = fixPageDates(assemble(spec, base, parts));
+  const dates = dateProblems(html);
+  return { html, report: summary(spec, html, validate) + (dates.length ? `\nDatum geprüft: ${dates.join(' ')}` : '') + (missing.length ? `\nNicht fertig geworden (Limit): ${missing.join(', ')} – biete an, sie mit edit_website nachzubauen.` : '') };
 }
 
 // Eingebautes Design-System, falls das Modell keins liefern konnte

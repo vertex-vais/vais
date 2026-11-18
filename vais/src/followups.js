@@ -2,7 +2,7 @@
 
 const MAX_WORDS = 8;
 const MAX_CHARS = 120;
-const MAX_ITEMS = 3;
+const MAX_ITEMS = 2;
 
 const QUESTION_START = /^(welche[rsn]?|welcher|welches|wie|was|warum|weshalb|wieso|wo|wann|wer|wen|wem|wessen|ob|how|what|why|which|who|when|where|whose|whom)\b/i;
 
@@ -25,12 +25,12 @@ const INFINITIVE_TO_IMPERATIVE = [
 
 export const DEMO_SUGGESTIONS = {
   image: {
-    de: ['Gib ihm einen roten Anzug', 'Stell ihn in eine verregnete Großstadt', 'Mach daraus ein Anime-Bild'],
-    en: ['Give him a red suit', 'Put him in a rainy city', 'Make it an anime image'],
+    de: ['Gib ihm einen roten Anzug', 'Stell ihn in eine verregnete Großstadt'],
+    en: ['Give him a red suit', 'Put him in a rainy city'],
   },
   text: {
-    de: ['Erklär das genauer', 'Gib mir ein Beispiel', 'Fasse es kurz zusammen'],
-    en: ['Explain that in more detail', 'Give me an example', 'Summarize it briefly'],
+    de: ['Erklär das genauer', 'Gib mir ein Beispiel'],
+    en: ['Explain that in more detail', 'Give me an example'],
   },
 };
 
@@ -100,10 +100,10 @@ export function extrasPrompt({ imageMode, wantTitle, firstTurn, currentTitle, qu
     : firstTurn ? '"title": ein kurzer, treffender Titel für diesen Chat (2–5 Wörter, keine Anführungszeichen, kein Punkt).'
       : `"title": Der Chat heißt bisher „${String(currentTitle ?? '').slice(0, 80)}“. NUR wenn diese neue Frage ein klar anderes Thema hat, gib einen neuen kurzen Titel für das neue Thema (2–5 Wörter). Bei Nachfragen, Details oder demselben Thema: leer lassen.`;
   const suggestionRule = imageMode
-    ? '"suggestions": 3 kurze, konkrete Ideen, wie der Nutzer das Bild als Nächstes abwandeln will (je max. 8 Wörter). Formuliere jede Idee als fertige Aufforderung aus Sicht des Nutzers, die er unverändert absenden kann – als Befehl an ApeX, nicht als Frage. Gute Beispiele: "Gib ihm einen roten Anzug", "Stell ihn in eine verregnete Großstadt", "Mach daraus ein Anime-Bild". Niemals ein Fragezeichen. Niemals den Nutzer anreden oder um eine Entscheidung bitten (kein du/dir, kein „möchtest du“, „soll er“, „welche Kleidung soll…“, „wie soll die Umgebung…“).'
-    : '"suggestions": 3 kurze, unterschiedliche nächste Schritte (je max. 8 Wörter) als fertige Aufforderung aus Sicht des Nutzers, die er unverändert absenden kann. Gute Beispiele: "Erklär das einfacher", "Gib mir ein Beispiel mit Code", "Fasse es in 3 Punkten zusammen". Keine Fragen, kein Fragezeichen, keine Anrede an den Nutzer (kein du/dir, kein „möchtest du“, „willst du“, „soll ich“).';
+    ? '"suggestions": 0 bis 2 kurze Ideen, nur wenn sie wirklich helfen (je max. 8 Wörter). Sonst ein leeres Array. Fertige Aufforderung aus Sicht des Nutzers, als Befehl, kein Fragezeichen. Beispiele: "Gib ihm einen roten Anzug", "Stell ihn in eine verregnete Großstadt".'
+    : '"suggestions": 0 bis 2 fertige nächste Schritte, nur wenn sie wirklich helfen (je max. 8 Wörter). Sonst ein leeres Array. Beispiele: "Erklär das einfacher", "Gib mir ein Beispiel". Keine Fragen, kein Fragezeichen, kein du/dir.';
   return [
-    'Antworte NUR mit JSON, ohne Erklärung, im Format {"title": "...", "suggestions": ["...", "...", "..."]}.',
+    'Antworte NUR mit JSON, ohne Erklärung, im Format {"title": "...", "suggestions": ["...", "..."]}.',
     titleRule,
     suggestionRule,
     'Schreibe in derselben Sprache wie die Frage des Nutzers. Wenn die Sprache unklar ist, schreibe auf Deutsch.',

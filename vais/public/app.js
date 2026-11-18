@@ -689,7 +689,7 @@ function paintLabel(card, side) {
   if (a?.fallback && chat.mode !== 'battle' && isStaffUser) {
     const note = document.createElement('span');
     note.className = 'fallback-tag';
-    note.title = t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
+    note.title = a.fallback.message || t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
     note.textContent = `⚡ ${t('Notfall', 'Backup')}: ${a.fallback.name}`;
     label.append(note);
   }
@@ -1140,25 +1140,54 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
 
 function paintJob(job) {
   const chat = state.chat;
-  if (!chat || job.chatId && job.chatId !== chat.id) return;
-  let card = el.thread.querySelector(`.job-card[data-job="${job.id}"]`);
-  if (job.status !== 'running') {
-    card?.remove();
-    if (job.status === 'done' && job.text && !chat.turns.some((tn) => tn.jobId === job.id)) {
-      chat.turns.push({ user: '', jobId: job.id, answers: [{ text: job.text, status: 'done', error: null, steps: [], sources: [] }] });
-      const node = renderTurn(chat.turns.length - 1);
-      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-    return;
-  }
+  if (!chat || (job.chatId && job.chatId !== chat.id)) return;
+  const host = Number.isInteger(job.turn) ? el.thread.querySelector(`.turn[data-index="${job.turn}"] .answers`) : el.thread;
+  if (!host) return;
+  let card = host.querySelector(`.job-card[data-job="${job.id}"]`);
   if (!card) {
     card = document.createElement('div');
     card.className = 'job-card';
     card.dataset.job = job.id;
-    card.innerHTML = `<span class="chat-spin" aria-hidden="true"></span><span></span>`;
-    el.thread.append(card);
+    host.append(card);
   }
-  card.lastElementChild.textContent = job.detail || t('Arbeitet im Hintergrund…', 'Working in the background…');
+  const secs = Math.max(1, Math.round((Date.now() - (job.startedAt || Date.now())) / 1000));
+  const done = job.status === 'done';
+  card.classList.toggle('done', done);
+  const engineName = job.engine === 'cursor' ? 'Cursor-Agent' : (job.engine === 'builder' ? t('ApeX-Baukasten', 'ApeX builder') : t('Auftrag', 'Job'));
+  card.innerHTML = done
+    ? `<div><b></b><small class="job-engine"></small></div><button type="button" class="job-open"></button>`
+    : `<span class="chat-spin" aria-hidden="true"></span><div><b></b><small></small></div>`;
+  if (!done) {
+    card.querySelector('b').textContent = job.title || t('Arbeitet im Hintergrund…', 'Working in the background…');
+    card.querySelector('small').textContent = `${job.detail || ''} · ${secs}s · ${engineName}${job.note ? ` · ${job.note}` : ''}`;
+  } else {
+    card.querySelector('b').textContent = t('Fertig – ansehen', 'Done – view');
+    const eng = card.querySelector('.job-engine');
+    if (job.engine === 'cursor' && job.url) {
+      const link = document.createElement('a');
+      link.href = job.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Cursor-Agent';
+      eng.append(link);
+    } else eng.textContent = engineName;
+    if (job.note) eng.append(document.createTextNode(` · ${job.note}`));
+    card.querySelector('.job-open').textContent = t('Ansehen', 'View');
+    card.querySelector('.job-open')?.addEventListener('click', () => {
+      const html = (job.text || '').match(/```html\n([\s\S]*?)```/)?.[1] || '';
+      $('#expand-title').textContent = job.title || 'ApeX';
+      const body = $('#expand-body');
+      body.innerHTML = '';
+      if (html) {
+        const frame = document.createElement('iframe');
+        frame.className = 'job-frame';
+        frame.setAttribute('sandbox', 'allow-scripts');
+        frame.srcdoc = html;
+        body.append(frame);
+      } else body.textContent = job.text || '';
+      $('#expand').hidden = false;
+    });
+  }
 }
 let jobTimer = 0;
 function startJobWatch(job) {
@@ -1206,6 +1235,10 @@ async function send() {
     }
   }
 
+  if (!state.chat && location.hash.startsWith('#c/')) {
+    await loadChat(decodeURIComponent(location.hash.slice(3)));
+    if (!state.chat) return;
+  }
   if (!state.chat) {
     state.mode = 'agent'; state.modality = 'auto'; // alle: immer ApeX (der Server erzwingt das auch)
     if (state.mode === 'sxs' || state.mode === 'direct') {
@@ -3026,6 +3059,10 @@ async function loadChat(id) {
   el.vote.hidden = true;
   el.voteResult.hidden = true;
   state.chat.turns.forEach((_, i) => renderTurn(i));
+  state.chat.turns.forEach((tn, i) => {
+    const job = tn.answers?.[0]?.job;
+    if (job) paintJob({ ...job, chatId: data.id, turn: i, title: job.title || tn.user });
+  });
   renderQueue();
   setTimeout(flushOutbox, 300); // offline Vorgemerktes für diesen Chat jetzt senden
   el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
@@ -3065,7 +3102,7 @@ function watchBackground(id, agent = true) {
       const data = await res.json();
       const still = data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'));
       if (still) return watchBackground(id, agent);
-      if (state.chat?.id === id && !busy()) { state.chat = null; loadChat(id); haptic('success'); }
+      if (state.chat?.id === id && !busy()) loadChat(id);
     } catch { watchBackground(id, agent); }
   }, 4000);
 }

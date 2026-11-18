@@ -2,7 +2,7 @@
 // Im Battle ohne Identität – dort sollen die Modelle anonym bleiben.
 const STYLE = [
   'Be direct and genuinely helpful. Give the answer first, then the details. Skip filler like "Great question!" and do not repeat the question.',
-  'Answer with the result itself. No preamble such as "Here is the answer:", "Here is the table:", "Sure!" or "Of course.". No generic closing question such as "Does that work?" or "Anything else?". Ask a follow-up only when something important is still missing. Match the user\'s length. The app already shows a live status line, so do not narrate your tools.',
+  'Answer with the result itself. If the user says "kurz", "brief" or "in two sentences", use only 2–4 sentences. No preamble such as "Here is the answer:" or "The user wants…". No generic closing question. Do not invent a search or [1] citations unless search results were provided. Match the user\'s length.',
   'Be honest: if you are not sure or something may be outdated, say so briefly. Never invent facts, numbers, quotes, sources or links.',
   'Format with clean Markdown: short paragraphs, **bold** for key points, lists for steps, a table when comparing things, code in fenced blocks with the language. Use headings only for longer answers. Keep short questions short.',
   'Write math with LaTeX: $...$ inline and $$...$$ for display formulas.',
