@@ -53,6 +53,8 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  's-plan': svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>'),
+  's-agent': svg('<path d="m8 9-4 3 4 3M16 9l4 3-4 3M13.5 6l-3 12"/>'),
   pin: svg('<path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/>'),
   folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'),
@@ -919,8 +921,8 @@ function renderSources(card, a) {
 }
 
 // Arbeitsschritte von ApeX über der Antwort anzeigen
-const STEP_EN = { draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
-const STEP_DE = { draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+const STEP_EN = { plan: 'Planning', agent: 'Coding', draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
+const STEP_DE = { plan: 'Plant', agent: 'Programmiert', draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
@@ -4019,7 +4021,7 @@ async function init() {
 function showWelcome() {
   post('/api/auth/welcomed', {}).catch(() => {}); // sofort merken – auch wenn man die Seite gleich schließt
   const ideas = [
-    ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('ApeX fragt kurz nach und baut sie.', 'ApeX asks a few questions and builds it.')],
+    ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('ApeX plant, recherchiert, baut und prüft sie selbst.', 'ApeX plans, researches, builds and checks it on its own.')],
     ['🧠', t('Erklär mir schwarze Löcher, als wäre ich 12', 'Explain black holes like I am 12'), t('Verständlich, mit Beispielen.', 'Easy to follow, with examples.')],
     ['📽️', t('Mach mir eine Präsentation über den Mond', 'Make me a presentation about the moon'), t('Schöne Folien zum Wischen.', 'Beautiful slides to swipe through.')],
   ];
