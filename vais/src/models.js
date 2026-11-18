@@ -1061,7 +1061,7 @@ function stallGuard(stallMs, signal, timeoutMs) {
   };
 }
 
-async function readAnswer(res, guard, signal) {
+async function readAnswer(res, guard, signal, onDelta) {
   const ctype = res.headers.get('content-type') || '';
   if (!/event-stream/i.test(ctype)) {
     const json = await res.json();
@@ -1091,7 +1091,10 @@ async function readAnswer(res, guard, signal) {
         if (json.error) throw fail('stream', Number(json.error.code) || 500, json.error.message, { label: 'KI', env: '' });
         const delta = json.choices?.[0]?.delta ?? {};
         guard.touch(delta);
-        if (delta.content) message.content += delta.content;
+        if (delta.content) {
+          message.content += delta.content;
+          if (onDelta && !message.tool_calls.some((tc) => tc?.function?.name)) onDelta(delta.content);
+        }
         if (delta.reasoning) message.reasoning = (message.reasoning || '') + delta.reasoning;
         if (delta.reasoning_content) message.reasoning_content = (message.reasoning_content || '') + delta.reasoning_content;
         for (const tc of delta.tool_calls ?? []) {
@@ -1124,7 +1127,7 @@ function abortedByStall(err, signal) {
   return err?.status === 504 || err?.name === 'TimeoutError' || err?.name === 'AbortError' || /aborted due to timeout|operation was aborted|zu lange geschwiegen/i.test(msg);
 }
 
-export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000, stallMs = 0 }) {
+export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000, stallMs = 0, onDelta }) {
   // stallMs ist die Zeit bis zum ersten Token, nicht die ganze Antwort
   const guard = stallGuard(stallMs, signal, timeoutMs);
   const [provider, ...rest] = model.split(':');
@@ -1152,7 +1155,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
       const err = Array.isArray(body) ? body[0]?.error : body?.error;
       throw fail(model, res.status, err?.message, { label: row.label || 'Custom', env: 'CUSTOM_OPENAI_API_KEY' });
     }
-    const json = await readAnswer(res, guard, signal).finally(() => guard.stop());
+    const json = await readAnswer(res, guard, signal, onDelta).finally(() => guard.stop());
     noteOk(model);
     const message = json.choices?.[0]?.message ?? { content: '' };
     message.finish = json.choices?.[0]?.finish_reason ?? null;
@@ -1195,7 +1198,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
     const err = Array.isArray(body) ? body[0]?.error : body?.error;
     throw fail(model, res.status, err?.message, p);
   }
-  const json = await readAnswer(res, guard, signal).finally(() => guard.stop());
+  const json = await readAnswer(res, guard, signal, onDelta).finally(() => guard.stop());
   noteOk(model);
   const message = json.choices?.[0]?.message ?? { content: '' };
   message.finish = json.choices?.[0]?.finish_reason ?? null; // 'length' = abgeschnitten

@@ -919,6 +919,9 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 .work-sec { font-variant-numeric: tabular-nums; }
 .work.open .agent-steps, .work:not(.live) .agent-steps { margin-top: 6px; }
 .work .agent-steps[hidden] { display: none; }
+.work-extra[hidden] { display: none; }
+.work-extra { padding: 4px 0 2px 4px; }
+.work-meta { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
 .card-foot { display: flex; gap: 2px; margin: 10px 0 0 -8px; }
 .card-foot .card-btn { color: var(--muted); }
 .card-foot .card-btn:hover { color: var(--text); }

@@ -109,6 +109,8 @@ test('Basis-Anweisung: Datum, Du-Form, Gedächtnis – im Battle ohne Identität
   assert.match(p, /2\. November 2026/);
   assert.match(p, /19:00/);
   assert.match(p, /"du"/);
+  assert.match(p, /No preamble/);
+  assert.doesNotMatch(p, /Start the visible answer with one short sentence/);
   assert.match(p, /LaTeX/);
   assert.match(p, /- Heißt Leeam/);
   const b = basePrompt({ battle: true, model: { name: 'x' } });

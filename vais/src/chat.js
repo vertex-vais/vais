@@ -339,6 +339,7 @@ setInterval(async () => {
 
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
+  const sentAt = Date.now();
   const { chatId, side = 0, messages, turn, display } = req.body ?? {};
   const row = await asApex(await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id), req.user);
   if (!row) throw new HttpError(404, t('Chat nicht gefunden. Starte einen neuen Chat.', 'Chat not found. Start a new chat.'));
@@ -389,9 +390,13 @@ chat.post('/stream', wrap(async (req, res) => {
         : 'text';
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
-  const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
+  // Prüfung, FAQ und Gedächtnis gleichzeitig – nicht nacheinander vor der Antwort
+  const safetyP = quick ? Promise.resolve(null) : checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
+  const faqP = !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? faqMatch(lastText).catch(() => null) : Promise.resolve(null);
+  const personalP = personalFor(req.user.id);
+  const blocked = await safetyP;
   // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, kostet nichts
-  const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
+  const faq = blocked ? null : await faqP;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
   if (!blocked && !faq && kind && !isUnlimited(req.user)) ipAnswerQuota(req.ip, 'answer', L.budget);
   // „Denken“: gründlicher nachdenken lassen – kostet den Zuschlag für lange Antworten (nicht bei ApeX und Bildern)
@@ -407,7 +412,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const giveBack = async () => { if (!charged) return; charged = false; await refund(req.user, reserved); undoIpAnswer(req.ip, 'answer'); }; // nichts geantwortet → kostet nichts
   const budget = charged ? await budgetOf(req.user) : null;
   let cost = 0; // am Ende abgerechnete Credits
-  const personal = await personalFor(req.user.id);
+  const personal = await personalP;
   // Agentenchats (Beta): nutzen das Gedächtnis auch, wenn es sonst aus ist
   if (row.mode === 'life' && !personal.memoryOn && !row.incognito) {
     personal.memories = (await all('SELECT id, text FROM memories WHERE user_id = ? ORDER BY id', req.user.id)).map((m) => ({ id: Number(m.id), text: m.text }));
@@ -431,6 +436,7 @@ chat.post('/stream', wrap(async (req, res) => {
   };
   let thinkStart = 0;
   let thinkMs = 0;
+  let waitMs = 0;
   let reaction = null; // Emoji-Reaktion von ApeX auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
   let cached = false; // Antwort kam aus dem Antwort-Speicher
@@ -442,7 +448,7 @@ chat.post('/stream', wrap(async (req, res) => {
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
     s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached || faqHit || cost)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto: faqHit ? undefined : auto, cached: cached || undefined, faq: faqHit || undefined, cost: cost || undefined }) : null,
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, waitMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto: faqHit ? undefined : auto, cached: cached || undefined, faq: faqHit || undefined, cost: cost || undefined }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -521,6 +527,10 @@ chat.post('/stream', wrap(async (req, res) => {
   try {
     const onText = (t) => {
       if (thinkStart && !thinkMs) thinkMs = Date.now() - thinkStart;
+      if (!waitMs) {
+        waitMs = Math.max(1, Date.now() - sentAt);
+        out(`${JSON.stringify({ wait: waitMs })}\n`);
+      }
       text += t;
       out(`${JSON.stringify({ t })}\n`);
       // Ohne Verbindung: Zwischenstand speichern, damit die App ihn schon zeigen kann
@@ -1168,7 +1178,7 @@ async function loadChatData(row, { forShare = false } = {}) {
       try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
-        steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, thinkSummary: forShare ? null : meta.thinkSummary ?? null,
+        steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, waitMs: meta.waitMs ?? 0, thinkSummary: forShare ? null : meta.thinkSummary ?? null,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
         reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq, cost: Number(meta.cost) || 0,
       };
