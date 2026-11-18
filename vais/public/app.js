@@ -187,6 +187,13 @@ function setOffline(on) {
 
 // Kurzes Vibrieren als Rückmeldung (nur Geräte, die das können; nie bei „weniger Bewegung“)
 const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+function motionReduced() {
+  try { if (localStorage.getItem('vais.motion') === 'off') return true; } catch { /* egal */ }
+  return !!quietMotion?.matches;
+}
+function applyMotion() { document.documentElement.classList.toggle('reduce-motion', motionReduced()); }
+applyMotion();
+quietMotion?.addEventListener?.('change', applyMotion);
 // Haptisches Feedback (in den Einstellungen abschaltbar).
 // Android: Vibration. iPhone (iOS 18+): kennt keine Vibration im Browser – aber das Umschalten eines
 // versteckten Schalters (<input switch>) löst ein kurzes Tippen der Taptic Engine aus.
@@ -546,6 +553,11 @@ $('#set-tilt')?.addEventListener('change', async (e) => {
 $('#set-imgq')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.imgq', e.target.value); } catch { /* egal */ } haptic('tap'); });
 $('#set-haptics')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.haptics', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } if (e.target.checked) haptic('success'); });
 $('#set-swipe')?.addEventListener('change', (e) => { try { localStorage.setItem('vais.swipe', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } haptic('tap'); });
+$('#set-motion')?.addEventListener('change', (e) => {
+  try { localStorage.setItem('vais.motion', e.target.checked ? 'off' : 'on'); } catch { /* egal */ }
+  applyMotion();
+  haptic('tap');
+});
 
 // Deine Nachricht fürs Modell: Text + Dateiinhalte, Bilder als eigene Teile
 function userContent(turn) {
@@ -834,6 +846,17 @@ setInterval(() => {
   if (!els.length) return;
   loadIdx += 1 + Math.floor(Math.random() * 3);
   els.forEach((e) => { e.classList.remove('swap'); void e.offsetWidth; e.textContent = loadWord(); e.classList.add('swap'); });
+  document.querySelectorAll('.work.live').forEach((box) => {
+    const card = box.closest('.card');
+    const turn = card?.closest('.turn');
+    const side = Number(card?.dataset.side);
+    const ans = state.chat?.turns?.[Number(turn?.dataset.index)]?.answers?.[side];
+    if (!ans) return;
+    const text = $('.work-text', box);
+    const sec = $('.work-sec', box);
+    if (text) text.textContent = workLine(ans);
+    if (sec && ans.startedAt) sec.textContent = ` ${Math.max(1, Math.round((Date.now() - ans.startedAt) / 1000))}s`;
+  });
 }, 1500);
 
 // „Denkt nach …“: zugeklappt, keine rohen Gedankennotizen. Nach dem Antippen eine kurze Zusammenfassung
@@ -924,20 +947,51 @@ function renderSources(card, a) {
 const STEP_EN = { plan: 'Planning', agent: 'Coding', draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
 const STEP_DE = { plan: 'Plant', agent: 'Programmiert', draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
-function renderSteps(card, a) {
-  let box = $('.agent-steps', card);
-  if (!a.steps?.length) { box?.remove(); return; }
-  if (!box) {
-    box = document.createElement('ol');
-    box.className = 'agent-steps';
-    $('.card-body', card).before(box);
+function workLine(a) {
+  const last = a.steps?.at(-1);
+  const n = a.sources?.length || 0;
+  const srcWord = (k) => (k === 1 ? t('Quelle', 'source') : t('Quellen', 'sources'));
+  if ((last?.kind === 'search' || a.searchQuery) && !a.text) {
+    return n
+      ? t(`Suche im Web… ${n} ${srcWord(n)}`, `Searching the web… ${n} ${srcWord(n)}`)
+      : t('Suche im Web…', 'Searching the web…');
   }
-  const working = a.status === 'streaming' && !a.text;
-  box.innerHTML = a.steps.map((st, i) => `
-    <li class="agent-step ${st.kind}${working && i === a.steps.length - 1 ? ' active' : ''}">
+  if (last?.kind === 'read') return t('Lese eine Seite…', 'Reading a page…');
+  if (last?.kind === 'plan' || last?.kind === 'draft') return t('Plane den nächsten Schritt…', 'Planning the next step…');
+  if (last?.text) return `${STEP_LABEL[last.kind] ?? t('Schritt', 'Step')}… ${last.text}`;
+  const phrases = [t('Denke nach…', 'Thinking…'), t('Plane den nächsten Schritt…', 'Planning the next step…')];
+  const i = Math.floor((Date.now() - (a.startedAt || Date.now())) / 2800);
+  return phrases[Math.abs(i) % phrases.length];
+}
+function renderSteps(card, a) {
+  let box = $('.work', card);
+  const live = a.status === 'streaming' && !a.text;
+  const elapsed = a.thinkMs || (a.startedAt ? Date.now() - a.startedAt : 0);
+  const secs = Math.max(1, Math.round(elapsed / 1000));
+  if (!live && !a.steps?.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'work';
+    box.innerHTML = `<button type="button" class="work-head" data-act="steps"><span class="work-spin" aria-hidden="true"><i></i><i></i><i></i></span><span class="work-text"></span><span class="work-sec"></span></button><ol class="agent-steps" hidden></ol>`;
+    ($('.think', card) ?? $('.card-body', card))?.before(box);
+  }
+  const open = !live && !!a.stepsOpen;
+  box.classList.toggle('live', live);
+  box.classList.toggle('open', open);
+  const text = $('.work-text', box);
+  const sec = $('.work-sec', box);
+  if (text) text.textContent = live ? workLine(a) : t(`Hat ${secs} s nachgedacht`, `Thought for ${secs} s`);
+  if (sec) sec.textContent = live ? ` ${secs}s` : '';
+  $('.work-head', box)?.setAttribute('aria-expanded', String(open || live));
+  const ol = $('.agent-steps', box);
+  if (!ol) return;
+  if (!a.steps?.length || live || !open) { ol.hidden = true; ol.innerHTML = ''; return; }
+  ol.hidden = false;
+  ol.innerHTML = a.steps.map((st) => `
+    <li class="agent-step ${st.kind}">
       ${ICON[`s-${st.kind}`] ?? ICON['s-other']}<span><b>${STEP_LABEL[st.kind] ?? t('Schritt', 'Step')}</b> <span class="t"></span></span>
     </li>`).join('');
-  box.querySelectorAll('.t').forEach((t, i) => { t.textContent = a.steps[i].text; });
+  ol.querySelectorAll('.t').forEach((node, i) => { node.textContent = a.steps[i].text; });
 }
 
 // Beim Streamen höchstens einmal pro Frame neu zeichnen
@@ -1586,6 +1640,13 @@ el.thread.addEventListener('click', async (e) => {
   if (act === 'sources') {
     a.sourcesOpen = !a.sourcesOpen;
     renderSources(btn.closest('.card'), a);
+    return;
+  }
+
+  if (act === 'steps') {
+    if (a.status === 'streaming' && !a.text) return;
+    a.stepsOpen = !a.stepsOpen;
+    renderSteps(btn.closest('.card'), a);
     return;
   }
 
@@ -2761,6 +2822,10 @@ function autosize() {
 
 function updateSend() {
   const isBusy = busy();
+  if (updateSend.was !== isBusy) {
+    updateSend.was = isBusy;
+    if (el.drawer && !el.drawer.hidden) renderHistory();
+  }
   setBusy(isBusy);
   const hasText = !!el.prompt.value.trim() || state.pending.length > 0;
   // Während die KI antwortet: mit Text → vormerken, ohne Text → stoppen
@@ -2804,6 +2869,13 @@ document.addEventListener('click', (e) => {
   if (!$('#account-menu').hidden && !$('.account').contains(e.target)) toggleAccount(false);
 });
 document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    closeDrawer();
+    go('');
+    el.prompt?.focus();
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (!$('#share-sheet').hidden) closeShare();
   else if (!$('#settings').hidden) closeSettings();
@@ -2855,7 +2927,14 @@ function saveLast() {
   } catch { /* egal */ }
 }
 let lastTimer;
-el.stage.addEventListener('scroll', () => { clearTimeout(lastTimer); lastTimer = setTimeout(saveLast, 400); }, { passive: true });
+function paintToBottom() {
+  const btn = $('#to-bottom');
+  if (!btn || !el.stage) return;
+  const gap = el.stage.scrollHeight - el.stage.scrollTop - el.stage.clientHeight;
+  btn.hidden = gap < 160 || el.thread?.hidden;
+}
+el.stage?.addEventListener('scroll', () => { clearTimeout(lastTimer); lastTimer = setTimeout(saveLast, 400); paintToBottom(); }, { passive: true });
+$('#to-bottom')?.addEventListener('click', () => { el.stage?.scrollTo({ top: el.stage.scrollHeight, behavior: motionReduced() ? 'auto' : 'smooth' }); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveLast(); });
 window.addEventListener('pagehide', saveLast);
 function resumeLast() {
@@ -3036,8 +3115,9 @@ function groupLabel(ts) {
 const openFolders = new Set(store.get('vais.folders.open', []));
 function chatRow(c) {
   const active = state.chat?.id === c.id ? ' active' : '';
-  return `<div class="drawer-chat${active}" data-row="${escapeHtml(c.id)}">
-      <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${c.pinned ? ICON.pin : ICON[c.mode] ?? ''}<span data-title="${escapeHtml(c.id)}"></span></button>
+  const spinning = state.chat?.id === c.id && busy();
+  return `<div class="drawer-chat${active}${spinning ? ' generating' : ''}" data-row="${escapeHtml(c.id)}">
+      <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${spinning ? '<span class="chat-spin" aria-hidden="true"></span>' : (c.pinned ? ICON.pin : ICON[c.mode] ?? '')}<span data-title="${escapeHtml(c.id)}"></span></button>
       <button class="drawer-chat-more" data-more="${escapeHtml(c.id)}" aria-label="${t('Mehr', 'More')}" title="${t('Mehr', 'More')}" aria-haspopup="menu">${ICON.more}</button>
     </div>`;
 }
@@ -3543,6 +3623,7 @@ function paintSettings() {
   setProp('#set-tilt', 'checked', fxPrefs.tilt());
   setProp('#set-imgq', 'value', imageQuality());
   setProp('#set-swipe', 'checked', swipeOn());
+  setProp('#set-motion', 'checked', motionReduced());
   const theme = getTheme();
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
   const langSel = $('#set-lang-select');

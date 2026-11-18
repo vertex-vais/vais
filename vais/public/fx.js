@@ -1,6 +1,6 @@
 // Effekte für ApeX: lebendiges Logo, Himmel je nach Tageszeit, 3D-Karten (Beta) und geheime Befehle.
 // Alles respektiert „Bewegung reduzieren“ und lässt sich in den Einstellungen abschalten.
-const quiet = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const quiet = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const pref = (key, def = true) => { try { const v = localStorage.getItem(key); return v === null ? def : v === 'on'; } catch { return def; } };
 const setPref = (key, on) => { try { localStorage.setItem(key, on ? 'on' : 'off'); } catch { /* egal */ } };
 
