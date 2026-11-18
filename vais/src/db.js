@@ -61,7 +61,7 @@ await client.batch([
 ], 'write');
 
 // Spalten, die später dazugekommen sind (bestehende Datenbanken nachrüsten)
-for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT'], ['share_id', 'TEXT'], ['renamed', 'INTEGER'], ['pinned', 'INTEGER'], ['folder', 'TEXT'], ['summary', 'TEXT'], ['summary_key', 'TEXT'], ['incognito', 'INTEGER']]) {
+for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT'], ['share_id', 'TEXT'], ['renamed', 'INTEGER'], ['pinned', 'INTEGER'], ['folder', 'TEXT'], ['summary', 'TEXT'], ['summary_key', 'TEXT'], ['incognito', 'INTEGER'], ['archived', 'INTEGER']]) {
   try { await client.execute(`ALTER TABLE chats ADD COLUMN ${column} ${type}`); } catch { /* gibt es schon */ }
 }
 

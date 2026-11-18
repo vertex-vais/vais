@@ -11,10 +11,12 @@ process.env.GROQ_API_KEY = 'test-key-groq-0000000000';
 process.env.DISABLE_FREE_IMAGES = 'true';
 
 const calls = [];
+let modelLists = 0;
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
   if (u.includes('api.groq.com') && u.endsWith('/models')) {
+    modelLists += 1;
     return json({ data: [
       { id: 'openai/gpt-oss-20b', active: true, owned_by: 'OpenAI' },
       { id: 'openai/gpt-oss-120b', active: true, owned_by: 'OpenAI' },
@@ -27,7 +29,7 @@ globalThis.fetch = async (url, opts = {}) => {
   return json({}, 404);
 };
 
-const { runAgent } = await import('../src/agent.js');
+const { runAgent, fitToolText, shouldRetrySameModel } = await import('../src/agent.js');
 
 async function ask(text) {
   calls.length = 0;
@@ -41,14 +43,44 @@ async function ask(text) {
   return { out, first: calls[0] };
 }
 
-test('Kurze Sachfrage: schnelles Modell, kein Werkzeug, Stream an', async () => {
+test('Kurze Sachfrage: schnelles Modell, kein Werkzeug, kaum Denken, keine Modellliste', async () => {
+  modelLists = 0;
+  const started = Date.now();
   const { out, first } = await ask('Wie hauptstadt Australien');
+  const ms = Date.now() - started;
+  console.log(`ApeX Messung kurze Frage: ${ms} ms bis zur Antwort (Mock)`);
+  assert.ok(ms < 1500, `zu langsam: ${ms} ms`);
   assert.match(out, /Canberra/);
   assert.equal(first.model, 'openai/gpt-oss-20b');
   assert.equal(first.stream, true);
+  assert.equal(first.reasoning_effort, 'low');
   assert.equal(first.tools, undefined);
+  assert.equal(modelLists, 0);
   assert.match(first.messages[0].content, /Kein Vorspann/);
   assert.match(first.messages[0].content, /Keine Schlussfrage/);
+});
+
+test('Suchtext wird auf ein Groq-Budget gekürzt, ein Tageslimit wechselt das Modell', () => {
+  assert.ok(fitToolText('x'.repeat(3000)).length < 2000);
+  assert.equal(fitToolText('kurz'), 'kurz');
+  assert.equal(shouldRetrySameModel({ status: 413, message: 'Request too large' }), true);
+  assert.equal(shouldRetrySameModel({ status: 429, raw: 'Rate limit reached, tokens per minute (TPM)' }), true);
+  assert.equal(shouldRetrySameModel({ status: 429, raw: 'tokens per day (TPD)' }), false);
+});
+
+test('Bau-Auftrag blockiert den Chat nicht und startet einen Hintergrundjob', async () => {
+  let started = null;
+  const begun = Date.now();
+  await runAgent({
+    messages: [{ role: 'user', content: 'Bau mir bitte im Hintergrund eine kleine Webseite mit einem Countdown bis Silvester' }],
+    onText: (s) => { started = (started || '') + s; },
+    onStep: () => {},
+    personal: {},
+    onBackground: (spec) => { started = `${started}|${spec.title}`; },
+  });
+  assert.ok(Date.now() - begun < 1500);
+  assert.match(started, /im Hintergrund/);
+  assert.match(started, /Webseite/);
 });
 
 test('Wettersuche: großes Modell mit Werkzeugen, ohne Stream-Abbruch', async () => {

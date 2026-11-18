@@ -314,7 +314,8 @@ export async function runBuildTask({ question, history = [], task, user = null, 
   // Bauen: Programmier-Agent, wenn eingerichtet und frei – sonst (oder bei Problemen) der eigene Baukasten
   let html = '';
   let viaAgent = false;
-  const agentOk = user ? await deps.cursorAvailable(user).catch(() => ({ ok: false })) : { ok: false };
+  const agentOk = user ? await deps.cursorAvailable(user).catch((err) => ({ ok: false, reason: err.message })) : { ok: false, reason: 'nouser' };
+  console.log(`ApeX Bau: Cursor ${agentOk.ok ? 'ja' : `nein (${agentOk.reason ?? '?'})`}`);
   if (agentOk.ok) {
     onStep({ kind: 'agent', text: 'Programmier-Agent übernimmt den Bau' });
     try {
@@ -323,7 +324,7 @@ export async function runBuildTask({ question, history = [], task, user = null, 
       viaAgent = true;
     } catch (err) {
       if (signal?.aborted) throw err;
-      console.error('Programmier-Agent nicht verfügbar, eigener Baukasten:', err.status ?? '', err.message);
+      console.error('Programmier-Agent nicht verfügbar, eigener Baukasten:', agentOk.reason ?? '', err.status ?? '', err.message);
       onStep({ kind: 'other', text: 'Wechsle zum eigenen Baukasten' });
     }
   }
@@ -368,8 +369,7 @@ export async function runBuildTask({ question, history = [], task, user = null, 
     p.features.length ? `**Funktioniert:** ${p.features.slice(0, 5).join(' · ')}` : '',
     `**Geprüft:** Anforderungen und Handy-Ansicht${revisions ? `, danach ${revisions === 1 ? 'einmal' : `${revisions}-mal`} überarbeitet` : ''}${left.length ? ' – auf dem Handy kann ich noch nachschärfen, sag einfach Bescheid' : ''}.`,
     p.assumptions.length ? `**Meine Annahmen:** ${p.assumptions.slice(0, 4).join(' · ')}` : '',
-    '',
-    p.openQuestions.length ? `Sag mir gern noch: ${p.openQuestions.join(' Und: ')} Dann passe ich es sofort an.` : 'Sag mir, was ich ändern oder ergänzen soll – ich passe es direkt an.',
+    p.openQuestions.length ? p.openQuestions.join(' ') : '',
   ].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && i > 0));
   return { html, text: lines.join('\n').trim(), viaAgent, revisions, plan: p, score: lastReview?.score ?? null };
 }

@@ -548,7 +548,7 @@
           <h3 data-en="Account">Konto</h3>
           <p class="set-hint" id="set-email"></p>
           <form id="set-password" class="set-form" novalidate>
-            <input type="email" autocomplete="username" id="set-username" hidden>
+            <input type="email" name="username" autocomplete="username" id="set-username" hidden>
             <label class="sr-only" for="set-current" data-en="Current password">Aktuelles Passwort</label>
             <input class="input" id="set-current" type="password" autocomplete="current-password" placeholder="Aktuelles Passwort" data-en-placeholder="Current password">
             <label class="sr-only" for="set-new" data-en="New password">Neues Passwort</label>
@@ -577,6 +577,7 @@
           <h3 data-en="Delete account">Konto löschen</h3>
           <p class="set-hint" data-en="Deletes your account and all your chats permanently.">Löscht dein Konto und alle deine Chats endgültig.</p>
           <form id="set-delete" class="set-form" novalidate>
+            <input type="email" name="username" autocomplete="username" hidden>
             <label class="sr-only" for="set-delete-pw" data-en="Password">Passwort</label>
             <input class="input" id="set-delete-pw" type="password" autocomplete="current-password" placeholder="Passwort zur Bestätigung" data-en-placeholder="Password to confirm">
             <p class="msg error" role="alert"></p>

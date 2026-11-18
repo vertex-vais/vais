@@ -11,7 +11,7 @@ export const LIMIT_FIELDS = {
   image: { min: 0, max: 100000, def: 20 }, // Sicherheits-Grenze: höchstens so viele Bilder pro Tag
   paidDaily: { min: 0, max: 10000, def: Number(process.env.PAID_DAILY_LIMIT ?? 20) }, // Premium-Antworten pro Tag
   burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Anfragen in 5 Minuten
-  maxChats: { min: 0, max: 1000, def: 10 }, // so viele gespeicherte Chats pro Person (0 = unbegrenzt)
+  maxChats: { min: 0, max: 1000, def: 200 }, // so viele aktive Chats pro Person (0 = unbegrenzt). Darüber wird der älteste still archiviert, nicht gelöscht.
 };
 // Was welche Arbeit kostet (Credits). Grundpreis + Zuschläge, gedeckelt pro Auftrag.
 export const COST_FIELDS = {

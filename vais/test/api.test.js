@@ -509,11 +509,12 @@ test('Höchstens N gespeicherte Chats – Inkognito zählt nicht', async () => {
       await stream(c, s.data.id, `Frage ${i}`);
     }
     const full = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'zu viel' });
-    assert.equal(full.status, 409);
-    assert.equal(full.data.chatLimit, 2);
+    assert.equal(full.status, 200);
+    const listed = (await c.json('/api/chat/list')).data.chats;
+    assert.equal(listed.find((chat) => chat.id === ids[0]).archived, true);
+    assert.equal(listed.find((chat) => chat.id === ids[1]).archived, false);
+    assert.equal((await c.json(`/api/chat/${ids[0]}`)).status, 200);
     assert.equal((await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'geheim', incognito: true })).status, 200);
-    await c.call(`/api/chat/${ids[0]}`, undefined, 'DELETE');
-    assert.equal((await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'jetzt geht es' })).status, 200);
     assert.equal((await c.json('/api/chat/list')).data.maxChats, 2);
   } finally {
     await a.json('/api/admin/limits', { limits: { maxChats: 10 } });
