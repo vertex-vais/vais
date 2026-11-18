@@ -55,7 +55,40 @@ test('Nur Groq (wie live): alles fällt sauber auf gpt-oss/Qwen zurück', () => 
 
 test('Keine abgeschalteten Groq-Modelle mehr in der Rangliste', () => {
   const all = Object.values(RANKING).flat().map(String).join(' ');
-  for (const gone of ['compound', 'kimi', 'llama-3', 'llama-4', 'maverick', 'scout']) assert.ok(!all.includes(gone), gone);
+  for (const gone of ['compound', 'llama-3', 'llama-4', 'maverick', 'scout']) assert.ok(!all.includes(gone), gone);
+  assert.ok(!all.includes('kimi-k2'), 'altes Groq-Kimi bleibt draußen');
+  assert.ok(all.includes('kimi-k3'), 'NVIDIA Kimi K3 bleibt als Ersatz');
+});
+
+test('ApeX-Ersatz nimmt das stärkste freie Modell, neue IDs und jedes OpenRouter-:free', () => {
+  const extra = [
+    m('gemini:gemini-4-hydrogen', ['text', 'code']),
+    m('gemini:gemini-3.8-flash', ['text', 'code']),
+    m('gemini:gemini-3.8-flash-lite', ['text']),
+    m('openrouter:thinkingmachines/inkling-2-small:free', ['text', 'code']),
+    m('openrouter:google/gemma-4-31b-it:free', ['text', 'code', 'vision']),
+    m('openrouter:baidu/ernie-5.5-flash-preview:free', ['text']),
+    m('nvidia:moonshotai/kimi-k3.1-pro', ['text', 'code']),
+    m('nvidia:nvidia/deepseek-v4.1-flash', ['text', 'code']),
+    m('nvidia:nvidia/nemotron-3-ultra-550b-a55b', ['text', 'code']),
+    m('nvidia:z-ai/glm-5.3-flash', ['text', 'code']),
+  ];
+  const busyGroq = [...LIVE, ...extra].map((x) => (x.id.startsWith('groq:') ? { ...x, busy: true } : x));
+  const backup = rankModels('agentBackup', busyGroq).map((x) => x.id);
+  assert.equal(backup[0], 'gemini:gemini-4-hydrogen');
+  assert.ok(backup.indexOf('nvidia:moonshotai/kimi-k3.1-pro') < backup.indexOf('nvidia:nvidia/deepseek-v4.1-flash'));
+  assert.ok(backup.indexOf('nvidia:nvidia/deepseek-v4.1-flash') < backup.indexOf('nvidia:z-ai/glm-5.3-flash'));
+  for (const id of [
+    'openrouter:thinkingmachines/inkling:free',
+    'openrouter:thinkingmachines/inkling-2-small:free',
+    'openrouter:google/gemma-4-31b-it:free',
+    'openrouter:nvidia/nemotron-3.5-super-vl:free',
+    'openrouter:baidu/ernie-5.5-flash-preview:free',
+    'gemini:gemini-3.8-flash',
+    'gemini:gemini-3.8-flash-lite',
+    'nvidia:nvidia/nemotron-3-ultra-550b-a55b',
+  ]) assert.ok(backup.includes(id), id);
+  assert.equal(rankModels('agent', busyGroq)[0].id, 'gemini:gemini-4-hydrogen');
 });
 
 test('Basis-Anweisung: Datum, Du-Form, Gedächtnis – im Battle ohne Identität', async () => {

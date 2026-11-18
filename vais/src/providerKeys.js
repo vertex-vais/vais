@@ -4,8 +4,9 @@
 // und haben Vorrang. Umgebungsvariablen (z. B. GROQ_API_KEY) sind nur der Ersatz, wenn kein
 // gespeicherter Schlüssel frei ist. 401 und 429 setzen eine Pause.
 //
-// NVIDIA (kostenloses Kontingent auf build.nvidia.com) ist adminOnly: diese Schlüssel dürfen
-// nie für Anfragen normaler Nutzer verwendet werden. getActiveProviderKey liefert sie nur mit { admin: true }.
+// NVIDIA (kostenloses Kontingent auf build.nvidia.com) bleibt adminOnly: getActiveProviderKey
+// und keysForUser liefern die Schlüssel ohne { admin: true } nie. Ausnahme nur der ApeX-Ersatz,
+// wenn die Einstellung nvidia_fallback an ist (Standard: an). Aus = wieder nur für Admins.
 //
 // Verschlüsselung: KEY_ENCRYPTION_SECRET (langer Zufallswert). Fehlt sie, wird aus einem vorhandenen
 // Server-Geheimnis abgeleitet (DATABASE_TOKEN, sonst SMTP_PASS, sonst BREVO_API_KEY, sonst
@@ -185,10 +186,25 @@ export function cachedKeys(provider) {
   return plainCache.get(provider) ?? [];
 }
 
-// Schlüssel, die für normale Nutzer benutzt werden dürfen. adminOnly (NVIDIA) ist immer leer.
+// Schlüssel, die für normale Nutzer benutzt werden dürfen. adminOnly (NVIDIA) ist hier immer leer.
+// Der ApeX-Ersatz liest NVIDIA separat über nvidiaFallbackOn() in models.js – nicht über diese Funktion.
 export function keysForUser(provider) {
   if (isAdminOnlyProvider(provider)) return [];
   return cachedKeys(provider).map((k) => k.key);
+}
+
+// NVIDIA als Ersatz für normale Nutzer, wenn andere Anbieter voll sind. Standard an.
+// adminOnly selbst bleibt: getActiveProviderKey('nvidia') ohne { admin: true } liefert weiter null.
+let nvidiaFallback = true;
+export function nvidiaFallbackOn() { return nvidiaFallback; }
+export async function loadNvidiaFallback() {
+  try { nvidiaFallback = (await getSetting('nvidia_fallback', 'on')) !== 'off'; } catch { nvidiaFallback = true; }
+  return nvidiaFallback;
+}
+export async function setNvidiaFallback(on) {
+  nvidiaFallback = !!on;
+  await setSetting('nvidia_fallback', on ? 'on' : 'off');
+  return nvidiaFallback;
 }
 
 function endpointOf(raw) {
@@ -226,7 +242,7 @@ export async function addProviderKey({ provider, label: labelRaw, key: keyRaw, b
   if (spec.needsEndpoint) {
     base = endpointOf(baseUrl);
     modelName = String(model ?? '').trim();
-    if (!/^[\w.\-:/]{1,120}$/.test(modelName)) throw fail(t('Bitte einen Modellnamen eintragen.', 'Please enter a model name.'));
+    if (!/^[\w.\-:/@]{1,120}$/.test(modelName)) throw fail(t('Bitte einen Modellnamen eintragen.', 'Please enter a model name.'));
   }
   const keyHash = hashKey(provider, key);
   if (await get('SELECT id FROM provider_api_keys WHERE provider = ? AND key_hash = ?', provider, keyHash)) throw fail(t('Diesen Schlüssel gibt es schon.', 'This key already exists.'));
@@ -359,14 +375,25 @@ async function testRequest(row, key, fetchImpl) {
   if (test.type === 'custom') {
     const base = row.base_url || String(process.env.CUSTOM_OPENAI_BASE_URL ?? '').trim();
     if (!base) throw fail(t('Für den Test fehlt die Basis-URL.', 'The test needs a base URL.'));
-    return fetchImpl(`${endpointOf(base)}/models`, { headers: bearer, signal: AbortSignal.timeout(12_000) });
+    const root = endpointOf(base);
+    const modelsRes = await fetchImpl(`${root}/models`, { headers: bearer, signal: AbortSignal.timeout(12_000) });
+    // Cloudflare Workers AI (…/ai/v1) hat kein GET /models (404 oder 405). Dann ein winziger Chat mit dem gespeicherten Modell.
+    if (modelsRes.ok || (modelsRes.status !== 404 && modelsRes.status !== 405)) return modelsRes;
+    const model = String(row.model_name || row.model || process.env.CUSTOM_OPENAI_MODEL || '').trim();
+    if (!model) return modelsRes;
+    return fetchImpl(`${root}/chat/completions`, {
+      method: 'POST',
+      headers: { ...bearer, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
+      signal: AbortSignal.timeout(12_000),
+    });
   }
   return fetchImpl(test.url, { headers: { ...bearer, ...(test.headers ?? {}) }, signal: AbortSignal.timeout(12_000) });
 }
 
 export async function testProviderKey(idRaw, fetchImpl = globalThis.fetch) {
   const id = Number(idRaw);
-  const row = Number.isInteger(id) ? await get('SELECT id, provider, secret, label, base_url FROM provider_api_keys WHERE id = ?', id) : null;
+  const row = Number.isInteger(id) ? await get('SELECT id, provider, secret, label, base_url, model_name FROM provider_api_keys WHERE id = ?', id) : null;
   if (!row) throw fail(t('Schlüssel nicht gefunden.', 'Key not found.'));
   const key = decryptSecret(row.secret);
   if (!key) throw fail(t('Der Schlüssel lässt sich nicht lesen. Bitte neu eintragen.', 'The key cannot be read. Please add it again.'));
@@ -441,11 +468,12 @@ export async function migrateLegacy() {
 
 try { await migrateLegacy(); } catch (err) { console.error('API-Keys übernehmen fehlgeschlagen:', err.message); }
 await refreshKeyCache();
+await loadNvidiaFallback();
 
 // Ein Schlüssel ohne Speichern testen (für „vor dem Speichern testen“). Liefert nie den Schlüssel zurück.
-export async function testPlainKey({ provider, key, baseUrl } = {}, fetchImpl = globalThis.fetch) {
+export async function testPlainKey({ provider, key, baseUrl, model } = {}, fetchImpl = globalThis.fetch) {
   if (!CATALOG[provider]) throw fail(t('Unbekannter Anbieter.', 'Unknown provider.'));
-  const row = { provider, base_url: provider === 'custom' ? endpointOf(baseUrl) : null };
+  const row = { provider, base_url: provider === 'custom' ? endpointOf(baseUrl) : null, model_name: model || null };
   try {
     const res = await testRequest(row, String(key ?? '').trim(), fetchImpl);
     return { ok: res.ok, status: res.status };
@@ -501,7 +529,7 @@ export async function listUnifiedKeys(runtime = () => ({})) {
     });
     return { ...p, keys: [...saved, ...env] };
   });
-  return { providers, keys: flat, encryption: encryptionSource() };
+  return { providers, keys: flat, encryption: encryptionSource(), nvidiaFallback: nvidiaFallbackOn() };
 }
 
 // Cursor-Aliase, damit bestehende Aufrufe gleich bleiben.

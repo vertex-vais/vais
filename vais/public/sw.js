@@ -2,7 +2,7 @@
 // - macht ApeX als App installierbar
 // - zeigt „ApeX wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v14';
+const CACHE = 'vais-v15';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/apex-mark.png', '/favicon-32-v3.png', '/icons/apex-192-v3.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
 const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/apex-512-v3.png'];
@@ -13,12 +13,8 @@ self.addEventListener('install', (event) => {
     const c = await caches.open(CACHE);
     await c.addAll(SHELL);
     await Promise.all(APP_FILES.map((f) => c.add(f).catch(() => {})));
-    // App-Seite aus dem alten Speicher übernehmen, damit Offline sofort weiter geht
-    for (const key of await caches.keys()) {
-      if (key === CACHE) continue;
-      const old = await (await caches.open(key)).match('/');
-      if (old) await c.put('/', old);
-    }
+    // Die alte Startseite nicht übernehmen: sie würde zur neuen app.js nicht passen
+    // (auf dem iPhone fehlen dann Knöpfe, die das Skript sucht, und die App bricht ab).
     await self.skipWaiting();
   })());
 });

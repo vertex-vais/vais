@@ -494,8 +494,13 @@ function keyUsageHtml(u) {
     const pct = Math.max(0, Math.min(100, Math.round((1 - left / limit) * 100)));
     return `<span class="adm-key-meter"><small>${label}: ${kfmt(left)} / ${kfmt(limit)} ${t('übrig', 'left')}${reset ? ` · ${t('voll frei in', 'fully free in')} ${soon(reset)}` : ''}</small><span class="adm-bar${pct >= 90 ? ' full' : ''}"><i style="width:${pct}%"></i></span></span>`;
   };
+  const requestsLeft = !L || L.reqLeft == null || L.reqLeft > 0;
+  const tpd = u.tpdExhausted && !u.rpdExhausted && requestsLeft
+    ? `<small>${t('Tokens heute aufgebraucht, Anfragen noch frei', 'Tokens used up for today, requests still free')}</small>`
+    : '';
   return `<div class="adm-key-use">
     <small>${t('Heute', 'Today')}: <b>${num(u.requests)}</b> ${t('Anfragen', 'requests')}${u.limited ? ` · ${num(u.limited)}× ${t('voll', 'full')}` : ''}${u.last ? ` · ${t('zuletzt', 'last')} ${when(u.last)}` : ''}</small>
+    ${tpd}
     ${L ? bar(L.reqLeft, L.reqLimit, t('Anfragen pro Tag', 'Requests per day'), L.reqReset) + bar(L.tokLeft, L.tokLimit, t('Tokens pro Minute', 'Tokens per minute'), L.tokReset) : ''}
   </div>`;
 }
@@ -615,6 +620,8 @@ function pkKeyRow(k) {
 function renderProviderKeys(data) {
   const warn = $('#pk-warn');
   if (warn) warn.hidden = data.encryption === 'env';
+  const fb = $('#nvidia-fallback');
+  if (fb && data.nvidiaFallback != null) fb.checked = !!data.nvidiaFallback;
   const providers = data.providers ?? [];
   const sel = $('#pk-provider');
   const addable = providers.filter((p) => !p.retired);
@@ -639,6 +646,9 @@ function renderProviderKeys(data) {
 async function loadProviderKeys() {
   try { renderProviderKeys(await api('provider-keys')); } catch (err) { toast(err.message); }
 }
+$('#nvidia-fallback')?.addEventListener('change', async (e) => {
+  try { renderProviderKeys(await api('nvidia-fallback', { on: e.target.checked })); } catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
+});
 $('#pk-provider')?.addEventListener('change', () => {
   $('#pk-extra').hidden = $('#pk-provider').value !== 'custom';
   $('#pk-nvidia').hidden = $('#pk-provider').value !== 'nvidia';

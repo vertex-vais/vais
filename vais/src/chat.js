@@ -550,6 +550,11 @@ chat.post('/stream', wrap(async (req, res) => {
           onRemember: (fact) => remember(req.user.id, fact, { force: row.mode === 'life' && !row.incognito }),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
+          onFallback: ({ from, to, message }) => {
+            logEvent('fallback', from?.id ?? model, message);
+            fallback = { id: to.id, name: to.name, maker: to.maker, icon: to.icon };
+            out(`${JSON.stringify({ fallback })}\n`);
+          },
           work,
           credits: budget ? { left: budget.left, imagesLeft: budget.imagesLeft, costs } : null,
           // für den Programmier-Agenten: Tageslimit pro Person, Name „username – Thema“, Testmodus

@@ -73,7 +73,7 @@ const HOUR = 60 * 60 * 1000;
 async function checkModels() {
   let models;
   try { models = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.id.startsWith('demo:') && !m.id.endsWith('#search')); } catch { return; }
-  const due = models.filter((m) => Date.now() - lastOkOf(m.id) > HOUR).slice(0, 14);
+  const due = models.filter((m) => !m.busy && Date.now() - lastOkOf(m.id) > HOUR).slice(0, 14);
   for (const m of due) {
     const started = Date.now();
     try {
