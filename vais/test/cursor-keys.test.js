@@ -166,6 +166,21 @@ test('Panel vor Umgebung, NVIDIA nie für normale Nutzer, eigener Endpunkt', asy
   });
   assert.equal(called.url, 'https://api.example.com/v1/models');
   assert.equal(result.ok, true);
+  const cfModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+  const cfBase = 'https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1';
+  const cf = await pk.addProviderKey({ provider: 'custom', label: 'CF', key: 'cf-token-1234567890abcd', baseUrl: cfBase, model: cfModel });
+  const calls = [];
+  const cfRes = await pk.testProviderKey(cf.id, async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method || 'GET', body: opts?.body ? JSON.parse(opts.body) : null });
+    if (String(url).endsWith('/models')) return new Response('method not allowed', { status: 405 });
+    return new Response('{"choices":[]}', { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+  assert.equal(cfRes.ok, true);
+  assert.equal(calls[0].url, `${cfBase}/models`);
+  assert.equal(calls[1].method, 'POST');
+  assert.equal(calls[1].url, `${cfBase}/chat/completions`);
+  assert.equal(calls[1].body.model, cfModel);
+  assert.equal(calls[1].body.max_tokens, 1);
   await pk.removeProviderKey(nv.id);
   delete process.env.NVIDIA_API_KEY;
   delete process.env.GROQ_API_KEY;

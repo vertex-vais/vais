@@ -242,7 +242,7 @@ export async function addProviderKey({ provider, label: labelRaw, key: keyRaw, b
   if (spec.needsEndpoint) {
     base = endpointOf(baseUrl);
     modelName = String(model ?? '').trim();
-    if (!/^[\w.\-:/]{1,120}$/.test(modelName)) throw fail(t('Bitte einen Modellnamen eintragen.', 'Please enter a model name.'));
+    if (!/^[\w.\-:/@]{1,120}$/.test(modelName)) throw fail(t('Bitte einen Modellnamen eintragen.', 'Please enter a model name.'));
   }
   const keyHash = hashKey(provider, key);
   if (await get('SELECT id FROM provider_api_keys WHERE provider = ? AND key_hash = ?', provider, keyHash)) throw fail(t('Diesen Schlüssel gibt es schon.', 'This key already exists.'));
@@ -375,14 +375,25 @@ async function testRequest(row, key, fetchImpl) {
   if (test.type === 'custom') {
     const base = row.base_url || String(process.env.CUSTOM_OPENAI_BASE_URL ?? '').trim();
     if (!base) throw fail(t('Für den Test fehlt die Basis-URL.', 'The test needs a base URL.'));
-    return fetchImpl(`${endpointOf(base)}/models`, { headers: bearer, signal: AbortSignal.timeout(12_000) });
+    const root = endpointOf(base);
+    const modelsRes = await fetchImpl(`${root}/models`, { headers: bearer, signal: AbortSignal.timeout(12_000) });
+    // Cloudflare Workers AI (…/ai/v1) hat kein GET /models (404 oder 405). Dann ein winziger Chat mit dem gespeicherten Modell.
+    if (modelsRes.ok || (modelsRes.status !== 404 && modelsRes.status !== 405)) return modelsRes;
+    const model = String(row.model_name || row.model || process.env.CUSTOM_OPENAI_MODEL || '').trim();
+    if (!model) return modelsRes;
+    return fetchImpl(`${root}/chat/completions`, {
+      method: 'POST',
+      headers: { ...bearer, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
+      signal: AbortSignal.timeout(12_000),
+    });
   }
   return fetchImpl(test.url, { headers: { ...bearer, ...(test.headers ?? {}) }, signal: AbortSignal.timeout(12_000) });
 }
 
 export async function testProviderKey(idRaw, fetchImpl = globalThis.fetch) {
   const id = Number(idRaw);
-  const row = Number.isInteger(id) ? await get('SELECT id, provider, secret, label, base_url FROM provider_api_keys WHERE id = ?', id) : null;
+  const row = Number.isInteger(id) ? await get('SELECT id, provider, secret, label, base_url, model_name FROM provider_api_keys WHERE id = ?', id) : null;
   if (!row) throw fail(t('Schlüssel nicht gefunden.', 'Key not found.'));
   const key = decryptSecret(row.secret);
   if (!key) throw fail(t('Der Schlüssel lässt sich nicht lesen. Bitte neu eintragen.', 'The key cannot be read. Please add it again.'));
@@ -460,9 +471,9 @@ await refreshKeyCache();
 await loadNvidiaFallback();
 
 // Ein Schlüssel ohne Speichern testen (für „vor dem Speichern testen“). Liefert nie den Schlüssel zurück.
-export async function testPlainKey({ provider, key, baseUrl } = {}, fetchImpl = globalThis.fetch) {
+export async function testPlainKey({ provider, key, baseUrl, model } = {}, fetchImpl = globalThis.fetch) {
   if (!CATALOG[provider]) throw fail(t('Unbekannter Anbieter.', 'Unknown provider.'));
-  const row = { provider, base_url: provider === 'custom' ? endpointOf(baseUrl) : null };
+  const row = { provider, base_url: provider === 'custom' ? endpointOf(baseUrl) : null, model_name: model || null };
   try {
     const res = await testRequest(row, String(key ?? '').trim(), fetchImpl);
     return { ok: res.ok, status: res.status };

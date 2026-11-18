@@ -303,7 +303,7 @@ admin.post(['/provider-keys', '/keys', '/cursor-keys'], adminOnly, wrap(async (r
     const key = String(req.body?.key ?? '').trim();
     if (!/^[\x21-\x7e]{16,400}$/.test(key)) throw new HttpError(400, t('Das sieht nicht wie ein Schlüssel aus.', 'That does not look like a key.'));
     let result;
-    try { result = await testPlainKey({ provider, key, baseUrl: req.body?.baseUrl }); } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+    try { result = await testPlainKey({ provider, key, baseUrl: req.body?.baseUrl, model: req.body?.model }); } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
     if (!result.ok && [400, 401, 403, 404].includes(result.status)) {
       throw new HttpError(400, t(`Der Schlüssel funktioniert nicht (Fehler ${result.status}) – bitte prüfen.`, `The key does not work (error ${result.status}) – please check it.`));
     }
