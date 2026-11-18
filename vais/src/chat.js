@@ -673,7 +673,10 @@ chat.post('/stream', wrap(async (req, res) => {
     } else {
       console.error(`Stream-Fehler (${model}):`, err.message);
       logEvent('error', model, err.message);
-      const message = err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.');
+      const rawMsg = err.message || '';
+      const message = /operation was aborted|aborted due to timeout/i.test(rawMsg)
+        ? t('Gerade antwortet kein Modell. Versuch es gleich noch einmal.', 'No model can answer right now. Please try again in a moment.')
+        : (rawMsg || t('Das Modell konnte nicht antworten.', 'The model could not answer.'));
       out(`${JSON.stringify({ error: message })}\n`);
       await save(side === 1 ? 1 : 0, text, 'error', message);
     }

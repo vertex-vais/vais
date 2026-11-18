@@ -48,7 +48,7 @@ test('Helfer nehmen das schnelle Modell, volle und kostenpflichtige werden über
 test('Nur Groq (wie live): alles fällt sauber auf gpt-oss/Qwen zurück', () => {
   const groq = LIVE.filter((x) => x.id.startsWith('groq:'));
   assert.equal(rankModels('agent', groq)[0].id, 'groq:openai/gpt-oss-120b');
-  assert.equal(rankModels('agentBackup', groq)[0].id, 'groq:qwen/qwen3.8-27b');
+  assert.equal(rankModels('agentBackup', groq)[0].id, 'groq:openai/gpt-oss-20b');
   assert.equal(rankModels('web', groq, { cap: 'web' })[0].id, 'groq:openai/gpt-oss-120b#search');
   assert.equal(rankModels('quick', groq)[0].id, 'groq:openai/gpt-oss-20b');
 });
@@ -60,7 +60,7 @@ test('Keine abgeschalteten Groq-Modelle mehr in der Rangliste', () => {
   assert.ok(all.includes('kimi-k3'), 'NVIDIA Kimi K3 bleibt als Ersatz');
 });
 
-test('ApeX-Ersatz nimmt das stärkste freie Modell, neue IDs und jedes OpenRouter-:free', () => {
+test('ApeX-Ersatz: schnelle Modelle zuerst, Kimi zuletzt, neue IDs und jedes OpenRouter-:free', () => {
   const extra = [
     m('gemini:gemini-4-hydrogen', ['text', 'code']),
     m('gemini:gemini-3.8-flash', ['text', 'code']),
@@ -75,9 +75,11 @@ test('ApeX-Ersatz nimmt das stärkste freie Modell, neue IDs und jedes OpenRoute
   ];
   const busyGroq = [...LIVE, ...extra].map((x) => (x.id.startsWith('groq:') ? { ...x, busy: true } : x));
   const backup = rankModels('agentBackup', busyGroq).map((x) => x.id);
-  assert.equal(backup[0], 'gemini:gemini-4-hydrogen');
-  assert.ok(backup.indexOf('nvidia:moonshotai/kimi-k3.1-pro') < backup.indexOf('nvidia:nvidia/deepseek-v4.1-flash'));
+  assert.match(backup[0], /flash/);
+  assert.ok(backup.indexOf('gemini:gemini-3.8-flash') < backup.indexOf('gemini:gemini-4-hydrogen'));
+  assert.ok(backup.indexOf('nvidia:nvidia/deepseek-v4.1-flash') < backup.indexOf('nvidia:moonshotai/kimi-k3.1-pro'));
   assert.ok(backup.indexOf('nvidia:nvidia/deepseek-v4.1-flash') < backup.indexOf('nvidia:z-ai/glm-5.3-flash'));
+  assert.equal(backup.at(-1), 'nvidia:moonshotai/kimi-k3.1-pro');
   for (const id of [
     'openrouter:thinkingmachines/inkling:free',
     'openrouter:thinkingmachines/inkling-2-small:free',
@@ -88,7 +90,13 @@ test('ApeX-Ersatz nimmt das stärkste freie Modell, neue IDs und jedes OpenRoute
     'gemini:gemini-3.8-flash-lite',
     'nvidia:nvidia/nemotron-3-ultra-550b-a55b',
   ]) assert.ok(backup.includes(id), id);
-  assert.equal(rankModels('agent', busyGroq)[0].id, 'gemini:gemini-4-hydrogen');
+  assert.match(rankModels('agent', busyGroq)[0].id, /flash/);
+  const fast = rankModels('agentFast', busyGroq).map((x) => x.id);
+  assert.ok(!fast.some((id) => /kimi/.test(id)), 'Smalltalk nimmt kein Kimi');
+  assert.equal(rankModels('agentFast', [
+    m('nvidia:moonshotai/kimi-k3.1-pro', ['text', 'code']),
+    m('custom:4', ['text'], { name: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }),
+  ])[0].id, 'custom:4');
 });
 
 test('Basis-Anweisung: Datum, Du-Form, Gedächtnis – im Battle ohne Identität', async () => {

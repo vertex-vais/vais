@@ -820,9 +820,10 @@ function updateCard(turnIndex, side) {
   } else if (!a.text && a.reaction && a.status === 'done') {
     body.innerHTML = `<p class="react-only">${t('Hat mit', 'Reacted with')} <span>${escapeHtml(a.reaction)}</span> ${t('reagiert', '')}</p>`;
   } else if (!a.text) {
+    // Eine Statuszeile: die Arbeitszeile oben. Die alte „Tüftelt“-Zeile nur, wenn es noch keine Schritte gibt.
     body.innerHTML = a.status === 'stopped'
       ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
-      : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span><em class="load-word">${loadWord()}</em></div>`;
+      : (a.steps?.length ? '' : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span><em class="load-word">${loadWord()}</em></div>`);
   } else {
     body.innerHTML = markdown(a.text);
     // Turbo: kurze Frage → blitzschnelles Modell; auf Wunsch genauer mit dem stärksten Modell
@@ -956,7 +957,8 @@ function workLine(a) {
       ? t(`Suche im Web… ${n} ${srcWord(n)}`, `Searching the web… ${n} ${srcWord(n)}`)
       : t('Suche im Web…', 'Searching the web…');
   }
-  if (last?.kind === 'read') return t('Lese eine Seite…', 'Reading a page…');
+  if (last?.kind === 'read' && /https?:|www\.|\bseite\b|\.[a-z]{2,}\//i.test(last.text || '')) return t('Lese eine Seite…', 'Reading a page…');
+  if (last?.kind === 'read') return t('Denke nach…', 'Thinking…');
   if (last?.kind === 'plan' || last?.kind === 'draft') return t('Plane den nächsten Schritt…', 'Planning the next step…');
   if (last?.text) return `${STEP_LABEL[last.kind] ?? t('Schritt', 'Step')}… ${last.text}`;
   const phrases = [t('Denke nach…', 'Thinking…'), t('Plane den nächsten Schritt…', 'Planning the next step…')];
