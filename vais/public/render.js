@@ -123,6 +123,19 @@ export function enhance(root) {
     wrap.className = 'table-wrap';
     table.replaceWith(wrap);
     wrap.append(table);
+    if (!wrap.querySelector('.table-copy')) {
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'table-copy';
+      copy.textContent = t('Tabelle kopieren', 'Copy table');
+      copy.addEventListener('click', () => {
+        const rows = [...table.rows].map((r) => [...r.cells].map((c) => c.innerText.replace(/\s+/g, ' ').trim()).join('\t')).join('\n');
+        const done = () => { copy.textContent = t('Kopiert', 'Copied'); setTimeout(() => { copy.textContent = t('Tabelle kopieren', 'Copy table'); }, 1200); };
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(rows).then(done).catch(() => {});
+        else done();
+      });
+      wrap.append(copy);
+    }
     requestAnimationFrame(() => wrap.classList.toggle('scrolls', wrap.scrollWidth > wrap.clientWidth + 4));
   });
   root.querySelectorAll('pre > code').forEach((code) => {

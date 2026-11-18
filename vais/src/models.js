@@ -14,7 +14,7 @@ import { keysForUser, noteFailureBySecret, peekProviderKey, getActiveProviderKey
 import { publicOrigin } from './canonical.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
-const IDLE_TIMEOUT = 75_000; // so lange darf ein Modell bis zum ersten Lebenszeichen brauchen
+const IDLE_TIMEOUT = 10_000; // ohne erstes Token in 10 s: abbrechen, ApeX nimmt das nächste Modell
 const GAP_TIMEOUT = 40_000; // so lange darf es mitten in der Antwort schweigen (danach: Selbstheilung)
 const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
@@ -1035,7 +1035,9 @@ function demoImage(name, text) {
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für ApeX)
-export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000 }) {
+export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000, stallMs = 0 }) {
+  // stallMs: ApeX bricht ab, wenn so lange kein Byte kommt, und wechselt das Modell
+  if (stallMs > 0) timeoutMs = Math.min(timeoutMs, stallMs);
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   if (provider === 'custom') {

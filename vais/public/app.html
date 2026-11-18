@@ -88,7 +88,7 @@
     <main class="stage" id="stage">
       <section class="home" id="home">
         <img class="home-mark" src="/icons/apex-mark.png" alt="" width="64" height="64">
-        <h1 class="home-title" data-en="How can I help?">Wie kann ich helfen?</h1>
+        <h1 class="home-title" data-en="What are we doing today?">Was steht heute an?</h1>
         <p class="home-sub" data-en="ApeX by VERTEX – chat, research, images and code in one AI.">ApeX von VERTEX – Chat, Recherche, Bilder und Code in einer KI.</p>
         <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder answers until the setup is complete.">Demo-Modus: Platzhalter-Antworten, bis die Einrichtung fertig ist.</p>
       </section>
@@ -157,6 +157,9 @@
       </section>
     </main>
 
+    <button type="button" class="to-bottom" id="to-bottom" hidden aria-label="Nach unten" data-en-aria-label="Scroll to bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+    </button>
     <div class="dock">
       <div class="dock-inner">
         <section class="suggest" id="suggest" aria-label="Vorschläge" data-en-aria-label="Suggestions">
@@ -222,7 +225,7 @@
       </div>
       <button class="drawer-item" id="d-new">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
-        <span data-en="New chat">Neuer Chat</span>
+        <span data-en="New chat">Neuer Chat</span><kbd class="kbd" aria-hidden="true">⇧⌘O</kbd>
       </button>
       <button class="drawer-item" id="d-translate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h8M8 3v2M10 5c0 4-2.5 7-6 8.5M6 9c1 2 3 3.5 5.5 4.5"/><path d="m13 21 4-9 4 9M14.5 18h5"/></svg>
@@ -442,6 +445,10 @@
           <label class="set-switch">
             <span><b data-en="Haptic feedback">Vibration (Haptik)</b><small data-en="A short tap feel when sending, when an answer is ready and on errors. iPhone: from iOS 18.">Kurzes Tippen beim Senden, wenn eine Antwort fertig ist und bei Fehlern. iPhone: ab iOS 18.</small></span>
             <input type="checkbox" id="set-haptics" role="switch">
+          </label>
+          <label class="set-switch">
+            <span><b data-en="Reduce motion">Bewegungen reduzieren</b><small data-en="Turns off extra motion. Also follows your device setting.">Schaltet zusätzliche Bewegung aus. Die Einstellung deines Geräts gilt zusätzlich.</small></span>
+            <input type="checkbox" id="set-motion" role="switch">
           </label>
           <label class="set-switch">
             <span><b data-en="Living logo">Lebendiges Logo</b><small data-en="The black hole breathes, spins while the AI is thinking and swallows your message when you send.">Das Schwarze Loch atmet, dreht sich, während die KI denkt, und schluckt deine Nachricht beim Senden.</small></span>
