@@ -40,13 +40,21 @@ globalThis.fetch = async (url, opts = {}) => {
   return json({}, 404);
 };
 
-const { runAgent, isSmallTalk, canSwitchModel } = await import('../src/agent.js');
+const { runAgent, isSmallTalk, isQuick, canSwitchModel } = await import('../src/agent.js');
 
 test('„Hallo“ ist Smalltalk, eine Recherche nicht', () => {
   assert.equal(isSmallTalk('Hallo'), true);
   assert.equal(isSmallTalk('Hi'), true);
   assert.equal(isSmallTalk('Bau mir eine Webseite'), false);
   assert.equal(isSmallTalk('Was ist die Hauptstadt von Frankreich?'), false);
+});
+
+test('Kurze Sachfragen sind schnell, Wetter und Bauen nicht', () => {
+  assert.equal(isQuick('Wie hauptstadt Australien'), true);
+  assert.equal(isQuick('Was ist die Hauptstadt von Frankreich?'), true);
+  assert.equal(isQuick('Hallo'), true);
+  assert.equal(isQuick('Wetter Berlin heute'), false);
+  assert.equal(isQuick('Bau mir eine Webseite'), false);
 });
 
 test('Timeout ohne Status wechselt das Modell', () => {

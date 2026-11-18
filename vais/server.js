@@ -13,7 +13,7 @@ await import('./src/alarm.js');
 const { serveDict } = await import('./src/ui-i18n.js');
 const { statusPage } = await import('./src/status.js');
 const { telegramBot } = await import('./src/telegram.js');
-const { demoMode, tempImage } = await import('./src/models.js');
+const { demoMode, tempImage, listModels } = await import('./src/models.js');
 const { OWNER, isStaff } = await import('./src/config.js');
 const { canonicalRedirect, publicOrigin } = await import('./src/canonical.js');
 const { readFile } = await import('node:fs/promises');
@@ -278,5 +278,6 @@ const server = app.listen(port, () => {
   // Telegram: Webhook + Befehle automatisch setzen (nur mit Token; Fehler blockieren nichts)
   if (telegramBot.state.on && process.env.NODE_ENV !== 'test') telegramBot.start().catch(() => {});
   if (demoMode) console.log('  (Demo-Modus: kein API-Schlüssel – Platzhalter-Modelle antworten)');
+  else listModels().catch(() => {}); // Modellliste schon warm, damit die erste Antwort nicht darauf wartet
   if (!mailConfigured) console.log('  (Entwicklungsmodus: Codes werden hier in der Konsole angezeigt, kein E-Mail-Versand eingerichtet)');
 });

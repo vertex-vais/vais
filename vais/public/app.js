@@ -683,7 +683,7 @@ function paintLabel(card, side) {
   if (won) label.insertAdjacentHTML('beforeend', `<span class="badge">✓ ${t('Gewinner', 'Winner')}</span>`);
   // Notfall-Modell: das gewählte Modell war voll, ein anderes hat diese Antwort geschrieben
   const a = chat.turns[Number(card.closest('.turn')?.dataset.index)]?.answers[side];
-  if (a?.fallback && chat.mode !== 'battle') {
+  if (a?.fallback && chat.mode !== 'battle' && isStaffUser) {
     const note = document.createElement('span');
     note.className = 'fallback-tag';
     note.title = t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
@@ -695,14 +695,6 @@ function paintLabel(card, side) {
     note.className = 'fallback-tag';
     note.title = t('Diese Antwort hat das ApeX-Team selbst geschrieben – sie kam sofort und hat nichts verbraucht.', 'The ApeX team wrote this answer – it came instantly and used nothing.');
     note.textContent = t('📌 Antwort vom ApeX-Team', '📌 Answer from the ApeX team');
-    label.append(note);
-  }
-  if (a?.cost && a.status !== 'streaming' && !creditsUnlimited) {
-    // Was diese Antwort vom Tagesbudget gekostet hat (dezent)
-    const note = document.createElement('span');
-    note.className = 'fallback-tag cost-tag';
-    note.title = t('So viele Credits hat diese Antwort von deinem Tagesbudget gekostet – je mehr ApeX dafür arbeiten musste, desto mehr.', 'This many credits were used from your daily budget – the more work ApeX had to do, the more.');
-    note.textContent = `⚡ ${a.cost} ${a.cost === 1 ? 'Credit' : 'Credits'}`;
     label.append(note);
   }
   if (a?.cached && chat.mode !== 'battle') {
@@ -820,10 +812,10 @@ function updateCard(turnIndex, side) {
   } else if (!a.text && a.reaction && a.status === 'done') {
     body.innerHTML = `<p class="react-only">${t('Hat mit', 'Reacted with')} <span>${escapeHtml(a.reaction)}</span> ${t('reagiert', '')}</p>`;
   } else if (!a.text) {
-    // Eine Statuszeile. Mit Arbeitsschritten steht sie oben; sonst nur „Denke nach…“.
+    // Die Statuszeile steht über der Karte. Hier kein zweites „Denke nach…“.
     body.innerHTML = a.status === 'stopped'
       ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
-      : (a.steps?.length ? '' : `<div class="typing" aria-label="${t('Denke nach…', 'Thinking…')}"><span></span><span></span><span></span><em>${t('Denke nach…', 'Thinking…')}</em></div>`);
+      : '';
   } else {
     body.innerHTML = markdown(a.text);
     // Turbo: kurze Frage → blitzschnelles Modell; auf Wunsch genauer mit dem stärksten Modell
@@ -850,36 +842,15 @@ setInterval(() => {
   });
 }, 1500);
 
-// „Denkt nach …“: zugeklappt, keine rohen Gedankennotizen. Nach dem Antippen eine kurze Zusammenfassung
+// Gedanken: zugeklappt in der einen Statuszeile. Nach dem Antippen eine kurze Zusammenfassung
 // (in deiner Sprache); die vollständigen Gedanken nur auf Wunsch.
-function renderThinking(card, a) {
-  let box = $('.think', card);
-  if (!a.thinking) { box?.remove(); return; }
-  if (!box) {
-    box = document.createElement('div');
-    box.className = 'think';
-    box.innerHTML = `<button type="button" class="think-head" data-act="think">${ICON.brain}<span></span>${ICON.chev}</button><div class="think-body"><div class="think-in"></div></div>`;
-    ($('.agent-steps', card) ?? $('.card-body', card)).before(box);
-  }
-  const live = a.status === 'streaming' && !a.text;
-  const open = !live && !!a.thinkOpen;
-  box.classList.toggle('live', live);
-  box.classList.toggle('open', open);
-  const secs = Math.max(1, Math.round((a.thinkMs || 0) / 1000));
-  $('.think-head span', box).textContent = live ? t('Denkt nach …', 'Thinking …') : `${t('Gedacht', 'Thought')}${a.thinkMs ? ` · ${secs} s` : ''}`;
-  $('.think-head', box).setAttribute('aria-expanded', String(open));
-  const inner = $('.think-in', box);
-  if (!open) { inner.innerHTML = ''; return; }
-  if (a.thinkRaw) {
-    inner.innerHTML = `<p class="think-raw"></p><button type="button" class="think-more" data-act="think-raw">${t('Nur Zusammenfassung', 'Summary only')}</button>`;
-    $('.think-raw', inner).textContent = a.thinking;
-    return;
-  }
-  inner.innerHTML = `<div class="think-sum">${a.thinkSummary ? markdown(a.thinkSummary) : `<p class="shimmer">${t('Fasst zusammen …', 'Summarizing …')}</p>`}</div><button type="button" class="think-more" data-act="think-raw">${t('Alle Gedanken zeigen', 'Show all thoughts')}</button>`;
+function renderThinking(card) {
+  // Eine Zeile reicht: die Gedanken sitzen in der aufklappbaren Statuszeile, nicht daneben.
+  $('.think', card)?.remove();
 }
 async function loadThinkSummary(card, a, turnIndex, side) {
   if (a.thinkSummary || a.thinkLoading || !state.chat?.id || state.chat.incognito) {
-    if (!a.thinkSummary && (state.chat?.incognito || !state.chat?.id)) { a.thinkRaw = true; renderThinking(card, a); }
+    if (!a.thinkSummary && (state.chat?.incognito || !state.chat?.id)) { a.thinkRaw = true; renderSteps(card, a); }
     return;
   }
   a.thinkLoading = true;
@@ -888,7 +859,7 @@ async function loadThinkSummary(card, a, turnIndex, side) {
     if (data.summary) a.thinkSummary = data.summary;
     else a.thinkRaw = true;
   } catch { a.thinkRaw = true; } finally { a.thinkLoading = false; }
-  if (card.isConnected) renderThinking(card, a);
+  if (card.isConnected) renderSteps(card, a);
 }
 
 // „Sucht im Web …“ und danach aufklappbare Quellen
@@ -938,6 +909,10 @@ function renderSources(card, a) {
 const STEP_EN = { plan: 'Planning', agent: 'Coding', draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
 const STEP_DE = { plan: 'Plant', agent: 'Programmiert', draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
+function waitedMs(a, live) {
+  if (live) return Date.now() - (a.startedAt || Date.now());
+  return a.waitMs || a.buildMs || a.thinkMs || 0;
+}
 function workLine(a) {
   const last = a.steps?.at(-1);
   const n = a.sources?.length || 0;
@@ -950,20 +925,23 @@ function workLine(a) {
   if (last?.kind === 'read' && /https?:|www\.|\bseite\b|\.[a-z]{2,}\//i.test(last.text || '')) return t('Lese eine Seite…', 'Reading a page…');
   if (last?.kind === 'read') return t('Denke nach…', 'Thinking…');
   if (last?.kind === 'plan' || last?.kind === 'draft') return t('Plane den nächsten Schritt…', 'Planning the next step…');
+  if (last?.kind === 'agent' && /gestartet|start/i.test(last.text || '')) return t('Starte Hintergrund-Agent…', 'Starting background agent…');
+  if (last?.text && /datei|file/i.test(last.text)) return t('Lese Datei…', 'Reading a file…');
   if (last?.text) return `${STEP_LABEL[last.kind] ?? t('Schritt', 'Step')}… ${last.text}`;
   return t('Denke nach…', 'Thinking…');
 }
 function renderSteps(card, a) {
   let box = $('.work', card);
   const live = a.status === 'streaming' && !a.text;
-  const elapsed = a.thinkMs || (a.startedAt ? Date.now() - a.startedAt : 0);
-  const secs = Math.max(1, Math.round(elapsed / 1000));
-  if (!live && !a.steps?.length) { box?.remove(); return; }
+  const show = live || a.waitMs || a.thinkMs || a.steps?.length || a.thinking;
+  if (!show) { box?.remove(); return; }
+  if (a.status === 'stopped' && !a.text && !a.steps?.length) { box?.remove(); return; }
+  const secs = Math.max(1, Math.round(waitedMs(a, live) / 1000));
   if (!box) {
     box = document.createElement('div');
     box.className = 'work';
-    box.innerHTML = `<button type="button" class="work-head" data-act="steps"><span class="work-spin" aria-hidden="true"><i></i><i></i><i></i></span><span class="work-text"></span><span class="work-sec"></span></button><ol class="agent-steps" hidden></ol>`;
-    ($('.think', card) ?? $('.card-body', card))?.before(box);
+    box.innerHTML = `<button type="button" class="work-head" data-act="steps"><span class="work-spin" aria-hidden="true"><i></i><i></i><i></i></span><span class="work-text"></span><span class="work-sec"></span></button><div class="work-extra" hidden></div>`;
+    $('.card-body', card)?.before(box);
   }
   const open = !live && !!a.stepsOpen;
   box.classList.toggle('live', live);
@@ -972,16 +950,28 @@ function renderSteps(card, a) {
   const sec = $('.work-sec', box);
   if (text) text.textContent = live ? workLine(a) : t(`Hat ${secs} s nachgedacht`, `Thought for ${secs} s`);
   if (sec) sec.textContent = live ? ` ${secs}s` : '';
-  $('.work-head', box)?.setAttribute('aria-expanded', String(open || live));
-  const ol = $('.agent-steps', box);
-  if (!ol) return;
-  if (!a.steps?.length || live || !open) { ol.hidden = true; ol.innerHTML = ''; return; }
-  ol.hidden = false;
-  ol.innerHTML = a.steps.map((st) => `
+  const head = $('.work-head', box);
+  head?.setAttribute('aria-expanded', String(open));
+  const meta = [];
+  if (a.cost) meta.push(`${a.cost} ${a.cost === 1 ? 'Credit' : 'Credits'}`);
+  if (isStaffUser && a.fallback?.name) meta.push(`${t('Notfall', 'Backup')}: ${a.fallback.name}`);
+  if (head) head.title = meta.join(' · ');
+  const extra = $('.work-extra', box);
+  if (!extra) return;
+  if (!open) { extra.hidden = true; extra.innerHTML = ''; return; }
+  extra.hidden = false;
+  const stepsHtml = a.steps?.length ? `<ol class="agent-steps">${a.steps.map((st) => `
     <li class="agent-step ${st.kind}">
       ${ICON[`s-${st.kind}`] ?? ICON['s-other']}<span><b>${STEP_LABEL[st.kind] ?? t('Schritt', 'Step')}</b> <span class="t"></span></span>
-    </li>`).join('');
-  ol.querySelectorAll('.t').forEach((node, i) => { node.textContent = a.steps[i].text; });
+    </li>`).join('')}</ol>` : '';
+  const thoughtHtml = a.thinking ? (a.thinkRaw
+    ? `<p class="think-raw"></p><button type="button" class="think-more" data-act="think-raw">${t('Nur Zusammenfassung', 'Summary only')}</button>`
+    : `<div class="think-sum">${a.thinkSummary ? markdown(a.thinkSummary) : `<p class="shimmer">${t('Fasst zusammen …', 'Summarizing …')}</p>`}</div><button type="button" class="think-more" data-act="think-raw">${t('Alle Gedanken zeigen', 'Show all thoughts')}</button>`) : '';
+  const metaHtml = meta.length ? `<p class="work-meta">${meta.map((m) => escapeHtml(m)).join(' · ')}</p>` : '';
+  extra.innerHTML = `${metaHtml}${stepsHtml}${thoughtHtml}`;
+  extra.querySelectorAll('.t').forEach((node, i) => { node.textContent = a.steps[i].text; });
+  const raw = $('.think-raw', extra);
+  if (raw) raw.textContent = a.thinking;
 }
 
 // Beim Streamen höchstens einmal pro Frame neu zeichnen
@@ -1054,7 +1044,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, searchQuery: null, images: [], reaction: null, fallback: null, auto: null, cached: false, faq: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, waitMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, searchQuery: null, images: [], reaction: null, fallback: null, auto: null, cached: false, faq: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -1094,8 +1084,10 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
           a.thinking += msg.r;
           scheduleUpdate(turnIndex, side);
         }
+        if (msg.wait && !a.waitMs) a.waitMs = msg.wait;
         if (msg.t) {
           if (a.thinkStart && !a.thinkMs) a.thinkMs = Date.now() - a.thinkStart;
+          if (!a.waitMs && a.startedAt) a.waitMs = Date.now() - a.startedAt;
           feedText(a, msg.t, turnIndex, side);
         }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
@@ -1633,25 +1625,18 @@ el.thread.addEventListener('click', async (e) => {
     return;
   }
 
-  if (act === 'steps') {
+  if (act === 'steps' || act === 'think') {
     if (a.status === 'streaming' && !a.text) return;
     a.stepsOpen = !a.stepsOpen;
-    renderSteps(btn.closest('.card'), a);
-    return;
-  }
-
-  if (act === 'think') {
-    if (a.status === 'streaming' && !a.text) return;
-    a.thinkOpen = !a.thinkOpen;
     const card = btn.closest('.card');
-    renderThinking(card, a);
-    if (a.thinkOpen && !a.thinkRaw && a.status !== 'streaming') loadThinkSummary(card, a, turnIndex, side);
+    renderSteps(card, a);
+    if (a.stepsOpen && a.thinking && !a.thinkRaw && a.status !== 'streaming') loadThinkSummary(card, a, turnIndex, side);
     return;
   }
   if (act === 'think-raw') {
     a.thinkRaw = !a.thinkRaw;
     const card = btn.closest('.card');
-    renderThinking(card, a);
+    renderSteps(card, a);
     if (!a.thinkRaw) loadThinkSummary(card, a, turnIndex, side);
     return;
   }
@@ -2033,7 +2018,7 @@ function voicePhase(phase, said) {
   voiceEl.dataset.phase = phase;
   $('#voice-state').textContent = {
     listen: t('Ich höre zu …', 'Listening …'),
-    think: t('Denkt nach …', 'Thinking …'),
+    think: t('Denke nach…', 'Thinking…'),
     speak: t('Spricht …', 'Speaking …'),
     paused: t('Pausiert', 'Paused'),
     tap: t('Tippe auf den Kreis und sprich', 'Tap the circle and speak'),
@@ -2833,10 +2818,11 @@ function updateSend() {
 
 el.prompt.addEventListener('input', autosize);
 el.prompt.addEventListener('keydown', (e) => {
-  const touch = matchMedia('(pointer: coarse)').matches;
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touch) {
+  // Handy: Enter bleibt Zeilenumbruch. Desktop (auch mit Touchscreen, solange eine Maus hovern kann): Enter sendet.
+  const softKeyboard = matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches;
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !softKeyboard) {
     e.preventDefault();
-    el.form.requestSubmit();
+    if (!el.send.disabled) el.form.requestSubmit();
   }
 });
 function stopAnswers() {

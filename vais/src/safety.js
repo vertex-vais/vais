@@ -53,7 +53,7 @@ export async function checkText(text, kind = 'prompt') {
       const g = await guardModel();
       if (!g) return null;
       const messages = g.guard ? [{ role: 'user', content: clean }] : [{ role: 'system', content: POLICY }, { role: 'user', content: `USER MESSAGE:\n${clean}` }];
-      const msg = await complete({ model: g.id, messages, maxTokens: g.guard ? 20 : 300, signal: AbortSignal.timeout(10_000) });
+      const msg = await complete({ model: g.id, messages, maxTokens: g.guard ? 20 : 40, timeoutMs: 1600, stallMs: 0, reasoningEffort: g.guard ? undefined : 'low', signal: AbortSignal.timeout(1600) });
       verdict = String(msg.content ?? '').trim().toLowerCase().split('\n').filter(Boolean).slice(-2).join('\n');
       if (!g.guard) verdict = /unsafe/.test(verdict) ? verdict.slice(verdict.indexOf('unsafe')) : 'safe';
     } catch (err) {
